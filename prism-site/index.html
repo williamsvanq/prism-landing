@@ -1,0 +1,2983 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PRISM — Repurpose Content Instantly</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;0,700;1,300;1,400;1,600;1,700&family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #07080a;
+      --bg-1:     #0d0e12;
+      --bg-2:     #131519;
+      --text:     #e8e4dc;
+      --text-dim: #6b6872;
+      --accent:   #f0522a;
+      --accent-2: #00ddb4;
+      --border:   #1c1d24;
+      --bar-h:    40px;
+    }
+
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Outfit', sans-serif;
+      font-weight: 300;
+      overflow-x: hidden;
+    }
+    body.bar-visible { padding-top: var(--bar-h); }
+
+    /* ── CURSOR AMBIENT GLOW ────────────────────── */
+    body::before {
+      content: '';
+      position: fixed; inset: 0; z-index: 2; pointer-events: none;
+      background: radial-gradient(600px circle at var(--cx, 50%) var(--cy, 50%),
+        rgba(240,82,42,0.055), transparent 70%);
+      transition: opacity 0.3s;
+    }
+
+    /* ── GRAIN TEXTURE ─────────────────────────── */
+    body::after {
+      content: '';
+      position: fixed; inset: 0; z-index: 9999;
+      pointer-events: none;
+      opacity: 0.028;
+      mix-blend-mode: overlay;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+      background-size: 256px 256px;
+    }
+
+    /* ── SCROLL ANIMATIONS (spring physics) ──── */
+    [data-animate] {
+      opacity: 0;
+      transform: translateY(26px);
+      transition: opacity 0.7s cubic-bezier(0.34, 1.56, 0.64, 1), transform 0.7s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    [data-animate].is-visible { opacity: 1; transform: none; }
+    [data-delay="1"] { transition-delay: 0.1s; }
+    [data-delay="2"] { transition-delay: 0.2s; }
+    [data-delay="3"] { transition-delay: 0.3s; }
+    [data-delay="4"] { transition-delay: 0.4s; }
+    [data-delay="5"] { transition-delay: 0.5s; }
+
+    /* ── ANNOUNCEMENT BAR ──────────────────────── */
+    #announcement-bar {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      height: var(--bar-h);
+      background: var(--accent);
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      font-family: 'Space Mono', monospace;
+      font-size: 0.65rem;
+      letter-spacing: 0.06em;
+      z-index: 200;
+      padding: 0 3rem;
+      white-space: nowrap;
+    }
+    #announcement-bar s { opacity: 0.6; }
+    #announcement-bar a { color: white; font-weight: 700; text-decoration: underline; margin-left: 0.35rem; }
+    #bar-close {
+      position: absolute; right: 1.25rem;
+      background: none; border: none; color: white;
+      font-size: 1rem; cursor: pointer; opacity: 0.65;
+      padding: 0.3rem 0.5rem; transition: opacity 0.2s; line-height: 1;
+    }
+    #bar-close:hover { opacity: 1; }
+    body.bar-hidden #announcement-bar { display: none; }
+    body.bar-hidden nav { top: 0 !important; }
+    body.bar-hidden .hero { padding-top: 8rem; }
+
+    /* ── NAV ───────────────────────────────────── */
+    nav {
+      position: fixed;
+      top: var(--bar-h); left: 0; right: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1.25rem 3rem;
+      border-bottom: 1px solid transparent;
+      transition: all 0.35s;
+    }
+    nav.scrolled {
+      border-bottom-color: var(--border);
+      background: rgba(7,8,10,0.9);
+      backdrop-filter: blur(20px);
+    }
+    .nav-logo {
+      display: flex; align-items: center; gap: 0.65rem;
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 1.4rem; font-weight: 700;
+      letter-spacing: 0.2em; text-transform: uppercase;
+      color: var(--text); text-decoration: none;
+    }
+    .nav-logo span { color: var(--accent); }
+    .prism-svg { width: 26px; height: 24px; flex-shrink: 0; }
+    .prism-svg .ray {
+      transform-origin: 13px 20px;
+      transition: transform 0.4s cubic-bezier(0.34,1.56,0.64,1), opacity 0.3s;
+    }
+    .nav-logo:hover .ray-1 { transform: rotate(-15deg) scaleY(1.35); }
+    .nav-logo:hover .ray-2 { transform: rotate(-7deg)  scaleY(1.2); }
+    .nav-logo:hover .ray-3 { transform: scaleY(1.45); }
+    .nav-logo:hover .ray-4 { transform: rotate(7deg)   scaleY(1.2); }
+    .nav-logo:hover .ray-5 { transform: rotate(15deg)  scaleY(1.35); }
+    nav ul { list-style: none; display: flex; gap: 2.5rem; align-items: center; }
+    nav ul a { color: var(--text-dim); text-decoration: none; font-size: 0.85rem; font-weight: 400; letter-spacing: 0.04em; transition: color 0.2s; }
+    nav ul a:hover { color: var(--text); }
+    .nav-cta { background: var(--accent) !important; color: #fff !important; padding: 0.55rem 1.35rem !important; font-weight: 500 !important; }
+    .nav-cta:hover { opacity: 0.85; }
+
+    /* hamburger */
+    .hamburger {
+      display: none; flex-direction: column; gap: 5px;
+      background: none; border: none; cursor: pointer; padding: 4px; z-index: 101;
+    }
+    .hamburger span { display: block; width: 22px; height: 2px; background: var(--text); transition: all 0.3s; border-radius: 2px; }
+    .hamburger.open span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+    .hamburger.open span:nth-child(2) { opacity: 0; }
+    .hamburger.open span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+
+    /* mobile overlay */
+    #mobile-menu {
+      position: fixed; inset: 0;
+      background: var(--bg-1); z-index: 99;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2.5rem;
+      transform: translateX(100%);
+      transition: transform 0.4s cubic-bezier(0.16,1,0.3,1);
+    }
+    #mobile-menu.open { transform: translateX(0); }
+    #mobile-menu a {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 2.8rem; font-weight: 700;
+      color: var(--text); text-decoration: none; letter-spacing: 0.04em;
+      transition: color 0.2s;
+    }
+    #mobile-menu a:hover { color: var(--accent); }
+    #mobile-menu .mm-cta { background: var(--accent); color: white !important; padding: 0.6rem 2.5rem; font-size: 1.5rem !important; }
+
+    /* ── HERO ──────────────────────────────────── */
+    .hero {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      align-items: center;
+      gap: 4rem;
+      padding: calc(var(--bar-h) + 5.5rem) 3rem 5rem;
+      position: relative;
+      overflow: hidden;
+    }
+    /* Gradient mesh blobs */
+    .hero::before {
+      content: '';
+      position: absolute; inset: 0;
+      pointer-events: none;
+      background:
+        radial-gradient(ellipse 60% 50% at 75% 30%, rgba(240,82,42,0.08) 0%, transparent 65%),
+        radial-gradient(ellipse 50% 60% at 20% 70%, rgba(0,221,180,0.055) 0%, transparent 60%),
+        radial-gradient(ellipse 40% 40% at 55% 85%, rgba(240,82,42,0.04) 0%, transparent 55%);
+      filter: blur(2px);
+    }
+    .hero-eyebrow {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.7rem; color: var(--accent);
+      letter-spacing: 0.22em; text-transform: uppercase;
+      margin-bottom: 2rem;
+      display: flex; align-items: center; gap: 0.85rem;
+      animation: fadeUp 0.6s ease both; animation-delay: 0.1s;
+    }
+    .hero-eyebrow::before { content: ''; display: block; width: 30px; height: 1px; background: var(--accent); }
+    .hero h1 {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: clamp(3.6rem, 7vw, 7.5rem);
+      font-weight: 700; line-height: 0.93; letter-spacing: -0.025em;
+      margin-bottom: 2rem;
+    }
+    .word-reveal {
+      display: inline-block;
+      opacity: 0; filter: blur(6px); transform: translateY(8px);
+      animation: wordIn 0.6s cubic-bezier(0.16,1,0.3,1) forwards;
+    }
+    @keyframes wordIn {
+      to { opacity: 1; filter: blur(0); transform: translateY(0); }
+    }
+    .hero h1 em { font-style: italic; color: var(--accent); }
+    .hero-sub {
+      font-size: 1rem; color: var(--text-dim);
+      max-width: 420px; line-height: 1.75; margin-bottom: 2.5rem; font-weight: 300;
+      animation: fadeUp 0.7s ease both; animation-delay: 0.35s;
+    }
+    .hero-actions {
+      display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;
+      animation: fadeUp 0.7s ease both; animation-delay: 0.5s;
+    }
+    .btn-primary {
+      background: var(--accent); color: white;
+      padding: 1rem 2.5rem; font-family: 'Outfit', sans-serif;
+      font-size: 0.95rem; font-weight: 500; border: none; cursor: pointer;
+      text-decoration: none; display: inline-block; letter-spacing: 0.03em;
+      transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.15s, box-shadow 0.3s;
+      will-change: transform;
+    }
+    .btn-primary:hover { transform: translateY(-3px); opacity: 0.92; box-shadow: 0 8px 30px rgba(240,82,42,0.35); }
+    .btn-ghost {
+      color: var(--text-dim); font-size: 0.88rem;
+      padding: 1rem 2rem; border: 1px solid var(--border);
+      text-decoration: none; transition: all 0.2s;
+      letter-spacing: 0.04em; cursor: pointer;
+      font-family: 'Outfit', sans-serif; background: transparent;
+    }
+    .btn-ghost:hover { border-color: var(--text-dim); color: var(--text); }
+    .social-proof-row {
+      display: flex; align-items: center; gap: 1rem; margin-top: 2rem;
+      flex-wrap: wrap;
+      animation: fadeUp 0.7s ease both; animation-delay: 0.6s;
+    }
+    .avatar-stack { display: flex; }
+    .avatar-stack .av {
+      width: 28px; height: 28px; border-radius: 50%;
+      border: 2px solid var(--bg);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.58rem; font-weight: 700; color: white;
+      margin-left: -8px; flex-shrink: 0;
+    }
+    .avatar-stack .av:first-child { margin-left: 0; }
+    .sp-text { font-size: 0.8rem; color: var(--text-dim); }
+    .sp-text strong { color: var(--text); }
+    .stars-row { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.5rem; animation: fadeUp 0.7s ease both; animation-delay: 0.65s; }
+    .stars { color: var(--accent-2); font-size: 0.9rem; letter-spacing: 0.04em; }
+    .stars-label { font-size: 0.78rem; color: var(--text-dim); }
+    .stars-label strong { color: var(--text); }
+    .hero-stats {
+      margin-top: 3rem; display: flex; gap: 3rem;
+      padding-top: 2.5rem; border-top: 1px solid var(--border);
+      flex-wrap: wrap;
+      animation: fadeUp 0.7s ease both; animation-delay: 0.75s;
+    }
+    .stat-num {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 2.4rem; font-weight: 700; line-height: 1;
+    }
+    .stat-label { font-size: 0.7rem; color: var(--text-dim); margin-top: 0.25rem; letter-spacing: 0.07em; text-transform: uppercase; }
+
+    /* ── HERO VISUALIZATION ────────────────────── */
+    .hero-visual {
+      display: flex; flex-direction: column; align-items: center; gap: 1.25rem;
+      animation: fadeUp 0.9s ease both; animation-delay: 0.4s;
+    }
+    .vis-card {
+      width: 100%; max-width: 360px;
+      background: var(--bg-1);
+      border: 1px solid var(--border);
+      border-radius: 10px; padding: 1.5rem;
+      position: relative; overflow: hidden;
+      box-shadow: 0 0 60px rgba(240,82,42,0.05);
+    }
+    .vis-card-label {
+      font-family: 'Space Mono', monospace; font-size: 0.6rem;
+      letter-spacing: 0.18em; text-transform: uppercase;
+      color: var(--text-dim); margin-bottom: 1rem;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .vis-status { color: var(--accent-2); display: flex; align-items: center; gap: 0.4rem; }
+    .vis-status::before {
+      content: ''; width: 6px; height: 6px; border-radius: 50%;
+      background: var(--accent-2); display: block;
+      animation: blink-dot 1.5s ease-in-out infinite;
+    }
+    @keyframes blink-dot { 0%,100%{opacity:1} 50%{opacity:0.3} }
+    .vis-text-lines { display: flex; flex-direction: column; gap: 0.55rem; }
+    .vis-line {
+      height: 8px; border-radius: 4px; background: var(--border);
+      position: relative; overflow: hidden;
+    }
+    .vis-line::after {
+      content: '';
+      position: absolute; inset: 0;
+      background: linear-gradient(90deg, transparent 0%, rgba(240,82,42,0.25) 50%, transparent 100%);
+      animation: shimmer 2s ease-in-out infinite;
+    }
+    .vis-line:nth-child(2)::after { animation-delay: 0.2s; }
+    .vis-line:nth-child(3)::after { animation-delay: 0.4s; }
+    .vis-line:nth-child(4)::after { animation-delay: 0.6s; }
+    .vis-line:nth-child(5)::after { animation-delay: 0.8s; }
+    @keyframes shimmer { 0%{transform:translateX(-100%)} 100%{transform:translateX(100%)} }
+    .vis-line.w100 { width: 100%; }
+    .vis-line.w85  { width: 85%; }
+    .vis-line.w100b{ width: 100%; animation-delay: 0.3s; }
+    .vis-line.w60  { width: 60%; }
+    .vis-line.w90  { width: 90%; }
+
+    .vis-flow {
+      display: flex; flex-direction: column; align-items: center; gap: 3px;
+    }
+    .vis-flow-dot {
+      width: 5px; height: 5px; border-radius: 50%; background: var(--accent);
+      animation: flow-pulse 1.2s ease-in-out infinite;
+    }
+    .vis-flow-dot:nth-child(2) { animation-delay: 0.2s; }
+    .vis-flow-dot:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes flow-pulse {
+      0%,100%{opacity:0.15; transform:scale(0.7)}
+      50%{opacity:1; transform:scale(1)}
+    }
+
+    .vis-processor {
+      width: 44px; height: 44px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent), #ff7043);
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Cormorant Garamond', serif; font-size: 0.65rem;
+      font-weight: 700; color: white; letter-spacing: 0.12em;
+      box-shadow: 0 0 24px rgba(240,82,42,0.45);
+      animation: glow-pulse 2s ease-in-out infinite;
+    }
+    @keyframes glow-pulse {
+      0%,100%{box-shadow:0 0 20px rgba(240,82,42,0.3)}
+      50%{box-shadow:0 0 40px rgba(240,82,42,0.65)}
+    }
+
+    .vis-platforms {
+      display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.4rem;
+      width: 100%; max-width: 360px;
+    }
+    .vis-pill {
+      background: var(--bg-2); border: 1px solid var(--border);
+      border-radius: 6px; padding: 0.65rem 0.3rem;
+      text-align: center; font-size: 0.55rem;
+      color: var(--text-dim); font-family: 'Space Mono', monospace;
+      letter-spacing: 0.04em; cursor: default;
+      opacity: 0; animation: pill-in 0.5s ease forwards;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .vis-pill:hover { border-color: var(--accent); background: var(--bg); }
+    .vis-pill-icon { display: block; font-size: 1rem; margin-bottom: 0.25rem; }
+    .vis-pill:nth-child(1){animation-delay:0.6s}
+    .vis-pill:nth-child(2){animation-delay:0.8s}
+    .vis-pill:nth-child(3){animation-delay:1.0s}
+    .vis-pill:nth-child(4){animation-delay:1.2s}
+    .vis-pill:nth-child(5){animation-delay:1.4s}
+    @keyframes pill-in { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:none} }
+
+    /* ── WALL OF LOVE ──────────────────────────── */
+    .wall-of-love {
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      padding: 3.5rem 3rem;
+      background: var(--bg-1);
+    }
+    .wol-label {
+      font-family: 'Space Mono', monospace; font-size: 0.6rem;
+      color: var(--text-dim); letter-spacing: 0.22em; text-transform: uppercase;
+      text-align: center; margin-bottom: 2.5rem;
+    }
+    .wol-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem;
+      max-width: 1100px; margin: 0 auto;
+    }
+    .wol-card {
+      background: rgba(255,255,255,0.025);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 10px; padding: 1.25rem 1.5rem;
+      backdrop-filter: blur(10px);
+      transition: border-color 0.25s, transform 0.3s cubic-bezier(0.34,1.56,0.64,1);
+    }
+    .wol-card:hover { border-color: rgba(240,82,42,0.2); transform: translateY(-3px); }
+    .wol-header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.9rem; }
+    .wol-avatar {
+      width: 34px; height: 34px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.78rem; font-weight: 700; color: white; flex-shrink: 0;
+    }
+    .wol-name { font-size: 0.82rem; font-weight: 600; color: var(--text); }
+    .wol-handle { font-family: 'Space Mono', monospace; font-size: 0.62rem; color: var(--text-dim); }
+    .wol-platform { font-size: 0.68rem; color: var(--text-dim); margin-left: auto; flex-shrink: 0; }
+    .wol-text { font-size: 0.83rem; color: var(--text-dim); line-height: 1.6; }
+    .wol-text strong { color: var(--text); }
+
+    /* ── SHARED SECTION ────────────────────────── */
+    section { padding: 7rem 3rem; }
+    .section-label {
+      font-family: 'Space Mono', monospace; font-size: 0.68rem;
+      color: var(--accent); letter-spacing: 0.25em; text-transform: uppercase; margin-bottom: 1.5rem;
+    }
+    .section-title {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: clamp(2.5rem, 5vw, 4.5rem);
+      font-weight: 700; line-height: 1.05; letter-spacing: -0.02em;
+    }
+    .section-title em { font-style: italic; color: var(--accent); }
+
+    /* ── HOW IT WORKS ──────────────────────────── */
+    .how-works {
+      background: var(--bg-1);
+      border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+      position: relative; overflow: hidden;
+    }
+    .how-works::before {
+      content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 0;
+      background: radial-gradient(ellipse 80% 60% at 50% 100%,
+        rgba(240,82,42,0.07) 0%, transparent 70%);
+    }
+    .how-works > * { position: relative; z-index: 1; }
+    .how-header {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 4rem;
+      align-items: end; margin-bottom: 5rem;
+    }
+    .how-desc { font-size: 1rem; color: var(--text-dim); line-height: 1.8; max-width: 400px; }
+    .how-flow {
+      display: grid; grid-template-columns: 1fr auto 1fr auto 1fr;
+      align-items: start; gap: 0;
+    }
+    .how-step {
+      padding: 2.5rem 2rem; position: relative;
+      background: var(--bg-2); border: 1px solid var(--border);
+      transition: border-color 0.3s cubic-bezier(0.34,1.56,0.64,1), transform 0.3s cubic-bezier(0.34,1.56,0.64,1);
+    }
+    .how-step:hover { border-color: rgba(240,82,42,0.35); transform: translateY(-4px); }
+    .how-connector {
+      display: flex; align-items: center; justify-content: center;
+      padding-top: 3.5rem; color: var(--accent); font-size: 1.1rem; opacity: 0.5;
+      position: relative; width: 3rem;
+    }
+    .how-connector::before {
+      content: ''; position: absolute; left: 0; right: 0; top: 4.2rem;
+      height: 1px; background: linear-gradient(90deg, var(--border), rgba(240,82,42,0.4), var(--border));
+    }
+    .how-step-num {
+      font-family: 'Space Mono', monospace; font-size: 0.62rem;
+      letter-spacing: 0.2em; color: var(--accent); margin-bottom: 1.5rem;
+    }
+    .how-step-mockup {
+      margin-bottom: 1.5rem; border-radius: 6px; overflow: hidden;
+      border: 1px solid var(--border);
+    }
+    .how-step-mockup-inner {
+      background: var(--bg); padding: 0.85rem 1rem;
+      font-size: 0.72rem; color: var(--text-dim); line-height: 1.5;
+    }
+    .how-step-mockup-bar {
+      background: var(--border); padding: 0.5rem 1rem;
+      display: flex; align-items: center; gap: 0.4rem;
+    }
+    .how-step-mockup-dot { width: 7px; height: 7px; border-radius: 50%; }
+    .how-step-title { font-family: 'Cormorant Garamond', serif; font-size: 1.35rem; font-weight: 700; margin-bottom: 0.5rem; }
+    .how-step-desc { font-size: 0.82rem; color: var(--text-dim); line-height: 1.65; }
+
+    /* ── TIME SAVINGS COMPARISON ───────────────── */
+    /* ── TYPOGRAPHIC INTERSTITIALS ───────────────── */
+    .type-moment {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      min-height: 100vh; text-align: center; padding: 0 5vw;
+      background: var(--bg);
+    }
+    .type-moment__eyebrow {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.72rem; letter-spacing: 0.25em; text-transform: uppercase;
+      color: var(--accent); margin-bottom: 2.5rem;
+    }
+    .type-moment__headline {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: clamp(3.8rem, 10vw, 10rem);
+      font-weight: 300; line-height: 1.02;
+      color: #fff; max-width: 14ch; letter-spacing: -0.02em;
+    }
+    .type-moment__headline em { font-style: italic; color: var(--accent); }
+
+    .comparison-section { background: var(--bg); border-top: 1px solid var(--border); }
+    .comparison-grid {
+      display: grid; grid-template-columns: 1fr 1fr;
+      background: var(--border); border: 1px solid var(--border);
+      margin-top: 4rem;
+    }
+    .comp-side { padding: 3.5rem; }
+    .comp-side.without { background: var(--bg-1); }
+    .comp-side.with { background: var(--bg-2); }
+    .comp-label {
+      font-family: 'Space Mono', monospace; font-size: 0.65rem;
+      letter-spacing: 0.2em; text-transform: uppercase; margin-bottom: 2rem;
+    }
+    .comp-label.bad { color: #e55353; }
+    .comp-label.good { color: var(--accent-2); }
+    .comp-tasks { list-style: none; margin-bottom: 2.5rem; }
+    .comp-tasks li {
+      display: flex; justify-content: space-between;
+      padding: 0.65rem 0; border-bottom: 1px solid var(--border);
+      font-size: 0.86rem; color: var(--text-dim);
+    }
+    .comp-tasks li:last-child { border-bottom: none; }
+    .time-bad { color: #e55353; opacity: 0.8; font-family: 'Space Mono', monospace; font-size: 0.78rem; }
+    .comp-total-bad {
+      font-family: 'Cormorant Garamond', serif; font-size: 3.5rem;
+      font-weight: 700; color: rgba(220,70,70,0.55); line-height: 1;
+    }
+    .comp-total-sub { font-size: 0.78rem; color: var(--text-dim); margin-top: 0.4rem; }
+    .comp-pitch { font-size: 1rem; color: var(--text); line-height: 1.7; margin-bottom: 2rem; }
+    .comp-total-good {
+      font-family: 'Cormorant Garamond', serif; font-size: 3.5rem;
+      font-weight: 700; font-style: italic; color: var(--accent-2); line-height: 1;
+    }
+    .comp-bottom {
+      background: var(--bg-1); border-top: 1px solid var(--border);
+      padding: 2.5rem; text-align: center; grid-column: 1 / -1;
+    }
+    .comp-punchline {
+      font-family: 'Cormorant Garamond', serif; font-size: 2.2rem;
+      font-style: italic; color: var(--text); line-height: 1.2;
+    }
+    .comp-punchline span { color: var(--accent); }
+
+    /* ── DEMO ──────────────────────────────────── */
+    .demo-section { background: var(--bg); }
+    .demo-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 2px;
+      margin-top: 4rem; background: var(--border); border: 1px solid var(--border);
+    }
+    .demo-input-panel {
+      background: var(--bg-1); padding: 2.5rem; display: flex; flex-direction: column;
+    }
+    .panel-label {
+      font-family: 'Space Mono', monospace; font-size: 0.62rem; letter-spacing: 0.2em;
+      text-transform: uppercase; color: var(--text-dim);
+      margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .panel-dot { width: 6px; height: 6px; background: var(--accent); border-radius: 50%; }
+    .demo-textarea {
+      background: transparent; border: none; color: var(--text);
+      font-family: 'Outfit', sans-serif; font-size: 0.875rem;
+      line-height: 1.85; resize: none; flex: 1; min-height: 260px; outline: none; font-weight: 300;
+    }
+    .demo-textarea::placeholder { color: var(--text-dim); }
+    .demo-run-btn {
+      margin-top: 2rem; background: var(--accent); color: white; border: none;
+      padding: 0.9rem 2rem; font-family: 'Outfit', sans-serif;
+      font-size: 0.9rem; font-weight: 500; cursor: pointer; letter-spacing: 0.04em;
+      display: flex; align-items: center; gap: 0.75rem; width: 100%;
+      justify-content: center; transition: opacity 0.2s;
+    }
+    .demo-run-btn:hover { opacity: 0.85; }
+    .demo-run-btn .arr { transition: transform 0.2s; }
+    .demo-run-btn:hover .arr { transform: translateX(4px); }
+    .demo-output-panel { background: var(--bg-1); overflow: hidden; display: flex; flex-direction: column; }
+    .output-tabs {
+      display: flex; border-bottom: 1px solid var(--border);
+      overflow-x: auto; scrollbar-width: none; flex-shrink: 0;
+    }
+    .output-tabs::-webkit-scrollbar { display: none; }
+    .output-tab {
+      font-family: 'Space Mono', monospace; font-size: 0.6rem; letter-spacing: 0.1em;
+      text-transform: uppercase; color: var(--text-dim);
+      padding: 1rem 1.2rem; border: none; background: transparent; cursor: pointer;
+      white-space: nowrap; border-right: 1px solid var(--border);
+      transition: all 0.2s; flex-shrink: 0;
+    }
+    .output-tab.active { color: var(--accent); background: var(--bg-2); }
+    .output-tab:hover:not(.active) { color: var(--text); }
+    .output-content {
+      padding: 1.5rem 1.75rem; flex: 1; overflow-y: auto; max-height: 460px;
+    }
+    .output-placeholder {
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; height: 320px;
+      color: var(--text-dim); text-align: center; gap: 1rem;
+    }
+    .output-placeholder .ph-icon { font-size: 2rem; opacity: 0.2; }
+    .output-placeholder p { font-size: 0.82rem; max-width: 200px; line-height: 1.55; }
+    .output-result { display: none; }
+    .output-result.visible { display: block; }
+
+    /* ══════════════════════════════════════════════
+       PLATFORM MOCKUPS — High-fidelity replicas
+    ══════════════════════════════════════════════ */
+
+    /* ─── SHARED BASE ─────────────────────────── */
+    .platform-chrome {
+      border-radius: 10px; overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.15);
+      max-height: 460px; overflow-y: auto;
+    }
+    .platform-chrome::-webkit-scrollbar { width: 4px; }
+    .platform-chrome::-webkit-scrollbar-track { background: transparent; }
+    .platform-chrome::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+
+    /* ─── LINKEDIN ─────────────────────────────── */
+    .mock-linkedin { background: #1b1f23; border: 1px solid #3d3d3d; }
+    .mock-li-topbar {
+      background: #1b1f23; padding: 0.7rem 1rem;
+      display: flex; align-items: center; justify-content: space-between;
+      border-bottom: 1px solid #3d3d3d;
+    }
+    .mock-li-logo { color: #0a66c2; font-size: 1.4rem; font-weight: 900; letter-spacing: -1px; }
+    .mock-li-topnav { display: flex; gap: 1.5rem; align-items: center; }
+    .mock-li-navitem { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+    .mock-li-navitem span { font-size: 0.58rem; color: rgba(255,255,255,0.55); }
+    .mock-li-navitem svg-icon { font-size: 1.1rem; color: rgba(255,255,255,0.55); }
+    .mock-li-card { background: #1b1f23; margin: 0; }
+    .mock-li-header {
+      padding: 1rem 1rem 0.75rem; display: flex; gap: 0.75rem;
+      align-items: flex-start;
+    }
+    .mock-li-avatar {
+      width: 48px; height: 48px; border-radius: 50%; flex-shrink: 0;
+      background: linear-gradient(135deg,#0a66c2,#004182);
+      display: flex; align-items: center; justify-content: center;
+      color: white; font-weight: 700; font-size: 1.1rem; position: relative;
+    }
+    .mock-li-online {
+      position: absolute; bottom: 1px; right: 1px;
+      width: 10px; height: 10px; background: #44b700; border-radius: 50%;
+      border: 2px solid #1b1f23;
+    }
+    .mock-li-name { font-size: 0.88rem; font-weight: 600; color: #e8e8e8; line-height: 1.3; }
+    .mock-li-name span { color: #0a66c2; font-weight: 400; font-size: 0.78rem; }
+    .mock-li-title { font-size: 0.72rem; color: rgba(255,255,255,0.5); margin-top: 0.1rem; }
+    .mock-li-time { font-size: 0.65rem; color: rgba(255,255,255,0.4); margin-top: 0.15rem; display: flex; align-items: center; gap: 0.3rem; }
+    .mock-li-more { margin-left: auto; font-size: 1.2rem; color: rgba(255,255,255,0.4); flex-shrink: 0; }
+    .mock-li-body {
+      padding: 0 1rem 0.75rem; font-size: 0.855rem; color: #e0e0e0;
+      line-height: 1.6; white-space: pre-line;
+    }
+    .mock-li-seemore { color: rgba(255,255,255,0.5); font-size: 0.78rem; display: inline; cursor: pointer; }
+    .mock-li-stats {
+      padding: 0.5rem 1rem; display: flex; align-items: center; justify-content: space-between;
+      border-top: 1px solid #3d3d3d; border-bottom: 1px solid #3d3d3d;
+    }
+    .mock-li-stats-left { font-size: 0.72rem; color: rgba(255,255,255,0.45); display: flex; align-items: center; gap: 0.3rem; }
+    .mock-li-stats-right { font-size: 0.72rem; color: rgba(255,255,255,0.45); }
+    .mock-li-reactions {
+      padding: 0.35rem 0.5rem; display: flex; justify-content: space-around;
+    }
+    .mock-li-btn {
+      display: flex; align-items: center; gap: 0.4rem;
+      font-size: 0.78rem; color: rgba(255,255,255,0.55); padding: 0.55rem 0.75rem;
+      border-radius: 4px; cursor: pointer; transition: background 0.15s; font-weight: 500;
+    }
+    .mock-li-btn:hover { background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.85); }
+    .mock-li-btn-icon { font-size: 1rem; }
+
+    /* ─── X / TWITTER ─────────────────────────── */
+    .mock-twitter { background: #000; border: 1px solid #2f3336; }
+    .mock-tw-topbar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0.75rem 1rem; border-bottom: 1px solid #2f3336;
+      background: rgba(0,0,0,0.85); backdrop-filter: blur(12px);
+      position: sticky; top: 0; z-index: 2;
+    }
+    .mock-tw-logo { color: #e7e9ea; font-size: 1.25rem; font-weight: 900; }
+    .mock-tw-tabs { display: flex; gap: 0; }
+    .mock-tw-tab {
+      font-size: 0.78rem; color: #71767b; padding: 0 1.25rem 0.6rem;
+      border-bottom: 2px solid transparent; cursor: pointer; white-space: nowrap;
+    }
+    .mock-tw-tab.active { color: #e7e9ea; border-bottom-color: #1d9bf0; font-weight: 600; }
+    .mock-tweet {
+      padding: 0.9rem 1rem; border-bottom: 1px solid #2f3336;
+      display: flex; gap: 0.75rem; position: relative;
+    }
+    .mock-tweet:last-child { border-bottom: none; }
+    .mock-tweet-left { display: flex; flex-direction: column; align-items: center; gap: 0; flex-shrink: 0; }
+    .mock-tw-avatar {
+      width: 40px; height: 40px; border-radius: 50%;
+      background: linear-gradient(135deg,#1d9bf0,#0d8de0); flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      color: white; font-weight: 700; font-size: 0.95rem; position: relative; z-index: 1;
+    }
+    .mock-tw-thread-line {
+      width: 2px; flex: 1; min-height: 12px;
+      background: #2f3336; margin-top: 4px;
+    }
+    .mock-tweet-right { flex: 1; min-width: 0; }
+    .mock-tw-meta {
+      display: flex; align-items: center; gap: 0; margin-bottom: 0.2rem; flex-wrap: nowrap;
+    }
+    .mock-tw-name { font-size: 0.88rem; font-weight: 700; color: #e7e9ea; white-space: nowrap; }
+    .mock-tw-verified {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 16px; height: 16px; background: #1d9bf0; border-radius: 50%;
+      color: white; font-size: 0.6rem; font-weight: 900; margin: 0 0.25rem; flex-shrink: 0;
+    }
+    .mock-tw-handle { font-size: 0.82rem; color: #71767b; white-space: nowrap; }
+    .mock-tw-dot { color: #71767b; margin: 0 0.25rem; font-size: 0.7rem; }
+    .mock-tw-time { font-size: 0.82rem; color: #71767b; white-space: nowrap; }
+    .mock-tw-more { margin-left: auto; color: #71767b; font-size: 1.1rem; cursor: pointer; padding-left: 0.5rem; flex-shrink: 0; }
+    .mock-tw-body {
+      font-size: 0.92rem; color: #e7e9ea; line-height: 1.55;
+      margin-bottom: 0.65rem; white-space: pre-wrap; word-break: break-word;
+    }
+    .mock-tw-body a { color: #1d9bf0; }
+    .mock-tw-actions {
+      display: flex; align-items: center; gap: 0; margin-top: 0.35rem;
+      max-width: 380px; justify-content: space-between;
+    }
+    .mock-tw-action {
+      display: flex; align-items: center; gap: 0.3rem;
+      font-size: 0.8rem; color: #71767b; cursor: pointer;
+      padding: 0.3rem 0.5rem; border-radius: 9999px;
+      transition: all 0.2s;
+    }
+    .mock-tw-action:hover { background: rgba(29,155,240,0.1); color: #1d9bf0; }
+    .mock-tw-action.like:hover { background: rgba(249,24,128,0.1); color: #f91880; }
+    .mock-tw-action.repost:hover { background: rgba(0,186,124,0.1); color: #00ba7c; }
+    .mock-tw-action-icon { font-size: 1.05rem; line-height: 1; }
+
+    /* ─── NEWSLETTER (Gmail-style) ─────────────── */
+    .mock-newsletter { background: #fff; border: 1px solid #e0e0e0; }
+    .mock-gmail-topbar {
+      background: #f6f8fc; padding: 0.6rem 1rem;
+      display: flex; align-items: center; gap: 0.75rem; border-bottom: 1px solid #e0e0e0;
+    }
+    .mock-gmail-logo { font-size: 1rem; font-weight: 700; color: #5f6368; }
+    .mock-gmail-logo span { color: #EA4335; }
+    .mock-gmail-logo span:nth-child(2) { color: #4285F4; }
+    .mock-gmail-logo span:nth-child(3) { color: #FBBC05; }
+    .mock-gmail-logo span:nth-child(4) { color: #34A853; }
+    .mock-gmail-actions { margin-left: auto; display: flex; gap: 0.5rem; }
+    .mock-gmail-icon { font-size: 0.85rem; color: #5f6368; cursor: pointer; }
+    .mock-email-subject-bar {
+      padding: 0.75rem 1rem; border-bottom: 1px solid #e8eaed;
+      font-size: 0.9rem; font-weight: 600; color: #202124;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .mock-email-tag {
+      font-size: 0.65rem; background: #e8f0fe; color: #1a73e8;
+      padding: 0.15rem 0.5rem; border-radius: 3px; font-weight: 500;
+    }
+    .mock-email-header {
+      padding: 0.9rem 1rem 0.5rem; display: flex; gap: 0.75rem; align-items: flex-start;
+    }
+    .mock-email-avatar {
+      width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
+      background: linear-gradient(135deg,#f0522a,#ff7043);
+      display: flex; align-items: center; justify-content: center;
+      color: white; font-weight: 700; font-size: 0.85rem;
+    }
+    .mock-email-from-name { font-size: 0.84rem; font-weight: 600; color: #202124; }
+    .mock-email-from-addr { font-size: 0.72rem; color: #5f6368; }
+    .mock-email-to { font-size: 0.72rem; color: #5f6368; margin-top: 0.1rem; }
+    .mock-email-date { margin-left: auto; font-size: 0.72rem; color: #5f6368; white-space: nowrap; }
+    .mock-email-body {
+      padding: 0.5rem 1rem 1.25rem; font-size: 0.875rem; color: #202124;
+      line-height: 1.75; white-space: pre-line;
+      font-family: Georgia, 'Times New Roman', serif;
+    }
+    .mock-email-footer {
+      padding: 0.75rem 1rem; border-top: 1px solid #e8eaed; background: #f6f8fc;
+      display: flex; gap: 0.75rem;
+    }
+    .mock-email-footer-btn {
+      font-size: 0.72rem; color: #5f6368; display: flex; align-items: center; gap: 0.3rem;
+    }
+
+    /* ─── INSTAGRAM ────────────────────────────── */
+    .mock-instagram { background: #000; border: 1px solid #262626; }
+    .mock-ig-topbar {
+      padding: 0.7rem 1rem; display: flex; align-items: center; justify-content: space-between;
+      border-bottom: 1px solid #262626;
+    }
+    .mock-ig-wordmark { font-size: 1.1rem; color: #fff; font-weight: 700; letter-spacing: -0.5px; }
+    .mock-ig-topicons { display: flex; gap: 1rem; font-size: 1.1rem; color: #fff; }
+    .mock-ig-header {
+      padding: 0.75rem 1rem; display: flex; align-items: center; gap: 0.75rem;
+    }
+    .mock-ig-avatar-wrap {
+      width: 36px; height: 36px; border-radius: 50%; padding: 2px; flex-shrink: 0;
+      background: linear-gradient(45deg,#f09433 0%,#e6683c 25%,#dc2743 50%,#cc2366 75%,#bc1888 100%);
+    }
+    .mock-ig-avatar-inner {
+      width: 100%; height: 100%; border-radius: 50%; background: #000;
+      padding: 2px;
+    }
+    .mock-ig-avatar-img {
+      width: 100%; height: 100%; border-radius: 50%;
+      background: linear-gradient(135deg,#667eea,#764ba2);
+      display: block;
+    }
+    .mock-ig-username { font-size: 0.82rem; font-weight: 600; color: #fff; }
+    .mock-ig-location { font-size: 0.7rem; color: rgba(255,255,255,0.5); }
+    .mock-ig-more { margin-left: auto; color: #fff; font-size: 1.2rem; }
+    .mock-ig-photo {
+      width: 100%; aspect-ratio: 1/1; max-height: 220px;
+      background: linear-gradient(135deg,#667eea 0%,#764ba2 50%,#f093fb 100%);
+      position: relative; display: flex; align-items: center; justify-content: center;
+      overflow: hidden;
+    }
+    .mock-ig-photo-label {
+      font-size: 0.65rem; color: rgba(255,255,255,0.4);
+      letter-spacing: 0.15em; text-transform: uppercase;
+    }
+    .mock-ig-dots { display: flex; gap: 4px; justify-content: center; padding: 0.5rem; }
+    .mock-ig-dot { width: 6px; height: 6px; border-radius: 50%; background: #1d9bf0; }
+    .mock-ig-dot.inactive { background: rgba(255,255,255,0.3); width: 5px; height: 5px; }
+    .mock-ig-actions-row {
+      padding: 0.3rem 1rem 0.2rem; display: flex; align-items: center; gap: 1rem;
+    }
+    .mock-ig-action { font-size: 1.4rem; color: #fff; cursor: pointer; }
+    .mock-ig-bookmark { margin-left: auto; }
+    .mock-ig-likes { padding: 0 1rem 0.35rem; font-size: 0.82rem; font-weight: 600; color: #fff; }
+    .mock-ig-caption {
+      padding: 0 1rem 0.5rem; font-size: 0.82rem; color: #fff;
+      line-height: 1.5; white-space: pre-line;
+    }
+    .mock-ig-caption strong { font-weight: 600; }
+    .mock-ig-hashtags { color: #a8c3f7; }
+    .mock-ig-comments { padding: 0 1rem 0.75rem; font-size: 0.78rem; color: rgba(255,255,255,0.4); }
+    .mock-ig-time { padding: 0 1rem 0.85rem; font-size: 0.68rem; color: rgba(255,255,255,0.3); text-transform: uppercase; letter-spacing: 0.06em; }
+
+    /* ─── GOOGLE SERP ──────────────────────────── */
+    .mock-seo { background: #202124; border: 1px solid #3c4043; }
+    .mock-google-topbar {
+      padding: 0.6rem 1rem; background: #202124;
+      display: flex; align-items: center; gap: 0.75rem; border-bottom: 1px solid #3c4043;
+    }
+    .mock-google-logo { font-size: 1.1rem; font-weight: 700; letter-spacing: -0.5px; }
+    .mock-google-logo span:nth-child(1) { color: #4285f4; }
+    .mock-google-logo span:nth-child(2) { color: #ea4335; }
+    .mock-google-logo span:nth-child(3) { color: #fbbc05; }
+    .mock-google-logo span:nth-child(4) { color: #4285f4; }
+    .mock-google-logo span:nth-child(5) { color: #34a853; }
+    .mock-google-logo span:nth-child(6) { color: #ea4335; }
+    .mock-google-searchbar {
+      flex: 1; background: #303134; border: 1px solid #5f6368;
+      border-radius: 24px; padding: 0.4rem 0.85rem;
+      font-size: 0.82rem; color: #e8eaed; display: flex; align-items: center; gap: 0.5rem;
+    }
+    .mock-google-search-icon { color: #9aa0a6; font-size: 0.85rem; }
+    .mock-google-tabs {
+      display: flex; gap: 0; padding: 0 0.25rem;
+      border-bottom: 1px solid #3c4043; overflow-x: auto; scrollbar-width: none;
+    }
+    .mock-google-tab {
+      font-size: 0.78rem; color: #9aa0a6; padding: 0.65rem 0.85rem;
+      border-bottom: 2px solid transparent; white-space: nowrap; cursor: pointer;
+    }
+    .mock-google-tab.active { color: #8ab4f8; border-bottom-color: #8ab4f8; }
+    .mock-serp-body { padding: 0.85rem 1rem; }
+    .mock-serp-result { margin-bottom: 0; }
+    .mock-serp-breadcrumb {
+      display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem;
+    }
+    .mock-serp-favicon {
+      width: 18px; height: 18px; border-radius: 50%; background: #5f6368;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.55rem; color: white; font-weight: 700; flex-shrink: 0;
+    }
+    .mock-serp-site { font-size: 0.78rem; color: #bdc1c6; }
+    .mock-serp-site span { color: #9aa0a6; }
+    .mock-serp-title {
+      font-size: 1.05rem; color: #8ab4f8; line-height: 1.35;
+      margin-bottom: 0.3rem; cursor: pointer;
+    }
+    .mock-serp-title:hover { text-decoration: underline; }
+    .mock-serp-desc { font-size: 0.82rem; color: #bdc1c6; line-height: 1.55; margin-bottom: 0.5rem; }
+    .mock-serp-desc span { color: #e8eaed; font-weight: 600; }
+    .mock-serp-divider { height: 1px; background: #3c4043; margin: 0.85rem 0; }
+    .mock-serp-char-check { display: flex; flex-direction: column; gap: 0.3rem; }
+    .mock-serp-char-row { display: flex; align-items: center; gap: 0.5rem; }
+    .mock-serp-char-bar { flex: 1; height: 4px; background: #3c4043; border-radius: 2px; overflow: hidden; }
+    .mock-serp-char-fill { height: 100%; border-radius: 2px; background: #34a853; }
+    .mock-serp-char-fill.warn { background: #ea4335; }
+    .mock-serp-char-label { font-size: 0.68rem; color: #9aa0a6; white-space: nowrap; font-family: monospace; }
+
+    /* ── PLATFORMS BENTO ───────────────────────── */
+    .platforms-section { background: var(--bg-1); border-top: 1px solid var(--border); position: relative; overflow: hidden; }
+    .platforms-section::before {
+      content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 0;
+      background: radial-gradient(ellipse 60% 80% at 0% 50%,
+        rgba(0,221,180,0.06) 0%, transparent 65%);
+    }
+    .platforms-section > * { position: relative; z-index: 1; }
+    .bento-grid {
+      display: grid;
+      grid-template-columns: 2fr 1.5fr 1.5fr;
+      grid-template-rows: auto auto;
+      gap: 12px;
+      margin-top: 4rem;
+    }
+    .bento-card {
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-radius: 12px; padding: 2.25rem;
+      position: relative; overflow: hidden;
+      transition: border-color 0.3s, transform 0.35s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.3s;
+    }
+    .bento-card:hover { border-color: rgba(240,82,42,0.3); transform: translateY(-4px); box-shadow: 0 12px 40px rgba(0,0,0,0.35); }
+    .bento-card.featured {
+      grid-column: 1; grid-row: 1 / 3;
+      background: linear-gradient(145deg, var(--bg-2) 0%, rgba(240,82,42,0.04) 100%);
+    }
+    .bento-card.twitter-card { grid-column: 2; grid-row: 1; }
+    .bento-card.ig-card     { grid-column: 3; grid-row: 1; }
+    .bento-card.nl-card     { grid-column: 2; grid-row: 2; }
+    .bento-card.seo-card    { grid-column: 3; grid-row: 2; }
+    .bento-icon { font-size: 1.5rem; margin-bottom: 1rem; display: block; }
+    .bento-name { font-family: 'Cormorant Garamond', serif; font-size: 1.35rem; font-weight: 700; margin-bottom: 0.5rem; }
+    .bento-detail { font-size: 0.8rem; color: var(--text-dim); line-height: 1.6; }
+    .bento-format { margin-top: 1.25rem; font-family: 'Space Mono', monospace; font-size: 0.58rem; color: var(--accent-2); letter-spacing: 0.08em; }
+    .bento-preview {
+      margin-top: 1.75rem; border-radius: 8px; overflow: hidden;
+      border: 1px solid var(--border);
+    }
+    /* Featured card LinkedIn mini-mockup */
+    .bento-li-mini { background: #fff; }
+    .bento-li-mini-header { padding: 0.7rem 0.85rem; display: flex; gap: 0.6rem; align-items: center; border-bottom: 1px solid #f0f0f0; }
+    .bento-li-mini-av { width: 28px; height: 28px; border-radius: 50%; background: linear-gradient(135deg,#0a66c2,#004182); flex-shrink:0; }
+    .bento-li-mini-name { font-size: 0.7rem; font-weight: 600; color: #000; font-family: -apple-system,sans-serif; }
+    .bento-li-mini-title { font-size: 0.6rem; color: #888; font-family: -apple-system,sans-serif; }
+    .bento-li-mini-body { padding: 0.65rem 0.85rem; font-size: 0.7rem; color: #333; line-height: 1.5; font-family: -apple-system,sans-serif; }
+    .bento-li-mini-actions { padding: 0.4rem 0.85rem; border-top: 1px solid #e8e8e8; display: flex; gap: 1rem; }
+    .bento-li-mini-actions span { font-size: 0.62rem; color: #666; font-family: -apple-system,sans-serif; }
+    /* Twitter mini */
+    .bento-tw-mini { background: #15202b; padding: 0.85rem 1rem; }
+    .bento-tw-mini-row { display: flex; gap: 0.5rem; align-items: flex-start; }
+    .bento-tw-mini-av { width: 26px; height: 26px; border-radius: 50%; background: linear-gradient(135deg,#1d9bf0,#0d8de0); flex-shrink:0; }
+    .bento-tw-mini-name { font-size: 0.7rem; font-weight: 700; color: #fff; font-family: -apple-system,sans-serif; }
+    .bento-tw-mini-body { font-size: 0.68rem; color: #e7e9ea; line-height: 1.45; margin-top: 0.2rem; font-family: -apple-system,sans-serif; }
+
+    /* ── PRICING ───────────────────────────────── */
+    .pricing-section { background: var(--bg); position: relative; overflow: hidden; }
+    .pricing-section::before {
+      content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 0;
+      background: radial-gradient(ellipse 70% 50% at 50% 50%,
+        rgba(120,40,200,0.07) 0%, transparent 70%);
+    }
+    .pricing-section > * { position: relative; z-index: 1; }
+    .pricing-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 2px;
+      background: var(--border); border: 1px solid var(--border);
+      max-width: 820px; margin-top: 4rem;
+      perspective: 1200px;
+    }
+    .pricing-card {
+      background: var(--bg-1); padding: 3.5rem; position: relative;
+      transition: transform 0.12s ease; transform-style: preserve-3d;
+    }
+    .pricing-card::after {
+      content: ''; position: absolute; inset: 0; pointer-events: none; border-radius: inherit;
+      background: radial-gradient(
+        circle at calc(var(--mx,0.5)*100%) calc(var(--my,0.5)*100%),
+        rgba(255,255,255,0.07) 0%, transparent 60%
+      );
+      opacity: 0; transition: opacity 0.2s;
+    }
+    .pricing-card:hover::after { opacity: 1; }
+    .pricing-card.featured { background: var(--bg-2); }
+    .pricing-badge {
+      font-family: 'Space Mono', monospace; font-size: 0.58rem;
+      letter-spacing: 0.2em; text-transform: uppercase;
+      color: var(--bg); background: var(--accent-2);
+      padding: 0.28rem 0.75rem; display: inline-block; margin-bottom: 2rem;
+    }
+    .pricing-tier { font-family: 'Space Mono', monospace; font-size: 0.68rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 0.75rem; }
+    .pricing-was { font-family: 'Space Mono', monospace; font-size: 0.75rem; color: var(--text-dim); text-decoration: line-through; margin-bottom: 0.25rem; }
+    .pricing-price { font-family: 'Cormorant Garamond', serif; font-size: 4.2rem; font-weight: 700; line-height: 1; margin-bottom: 0.4rem; }
+    .pricing-price sup { font-size: 1.5rem; vertical-align: super; }
+    .pricing-period { font-size: 0.78rem; color: var(--text-dim); margin-bottom: 0.5rem; }
+    .pricing-savings { font-size: 0.78rem; color: var(--accent-2); margin-bottom: 2.5rem; }
+    .pricing-features { list-style: none; margin-bottom: 3rem; }
+    .pricing-features li {
+      font-size: 0.86rem; color: var(--text-dim);
+      padding: 0.6rem 0; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 0.75rem;
+    }
+    .pricing-features li:last-child { border-bottom: none; }
+    .ck { color: var(--accent-2); }
+    .nx { opacity: 0.35; }
+    .hi { color: var(--text); }
+    .pricing-cta {
+      width: 100%; padding: 1rem 2rem; font-family: 'Outfit', sans-serif;
+      font-size: 0.9rem; font-weight: 500; cursor: pointer;
+      letter-spacing: 0.04em; transition: all 0.2s; text-align: center;
+      display: block; text-decoration: none;
+    }
+    .pricing-cta.free { background: transparent; color: var(--text-dim); border: 1px solid var(--border); }
+    .pricing-cta.free:hover { border-color: var(--text-dim); color: var(--text); }
+    .pricing-cta.paid { background: var(--accent); color: white; border: 1px solid var(--accent); }
+    .pricing-cta.paid:hover { opacity: 0.85; }
+    .stripe-note { margin-top: 0.85rem; font-family: 'Space Mono', monospace; font-size: 0.58rem; color: var(--text-dim); letter-spacing: 0.1em; display: flex; align-items: center; gap: 0.4rem; justify-content: center; }
+    .guarantee-badge {
+      margin-top: 1.25rem; padding: 0.75rem 1rem;
+      border: 1px solid var(--border); border-radius: 4px;
+      display: flex; align-items: center; gap: 0.75rem;
+      font-size: 0.78rem; color: var(--text-dim);
+    }
+    .guarantee-icon { font-size: 1.1rem; flex-shrink: 0; }
+
+    /* ── TESTIMONIALS (glassmorphism) ──────────── */
+    .testimonials-section { background: var(--bg-1); border-top: 1px solid var(--border); }
+    .testi-header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 4rem; flex-wrap: wrap; gap: 1rem; }
+    .testi-aggregate { font-family: 'Space Mono', monospace; font-size: 0.68rem; color: var(--text-dim); letter-spacing: 0.1em; }
+    .testi-aggregate span { color: var(--accent-2); }
+    .testimonials-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+    .testimonial {
+      background: rgba(255,255,255,0.025);
+      border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 12px;
+      backdrop-filter: blur(20px);
+      padding: 2.25rem;
+      transition: border-color 0.3s, transform 0.35s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.3s;
+    }
+    .testimonial:hover {
+      border-color: rgba(255,255,255,0.14);
+      transform: translateY(-4px);
+      box-shadow: 0 0 40px rgba(240,82,42,0.06), 0 8px 32px rgba(0,0,0,0.4);
+    }
+    .testi-stars { color: var(--accent-2); font-size: 0.85rem; letter-spacing: 0.08em; margin-bottom: 1rem; }
+    .testimonial-text { font-family: 'Cormorant Garamond', serif; font-size: 1.15rem; font-style: italic; line-height: 1.72; color: var(--text); margin-bottom: 1.5rem; }
+    .testimonial-author { display: flex; align-items: center; gap: 1rem; }
+    .author-avatar {
+      width: 38px; height: 38px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Cormorant Garamond', serif; font-weight: 700; font-size: 1rem;
+      color: white; flex-shrink: 0;
+    }
+    .author-name { font-size: 0.85rem; font-weight: 500; color: var(--text); }
+    .author-handle { font-family: 'Space Mono', monospace; font-size: 0.62rem; color: var(--text-dim); }
+    .testi-tag {
+      display: inline-block; margin-top: 0.4rem;
+      font-family: 'Space Mono', monospace; font-size: 0.57rem;
+      letter-spacing: 0.12em; text-transform: uppercase;
+      color: var(--accent-2); background: rgba(0,221,180,0.07);
+      padding: 0.18rem 0.5rem; border-radius: 2px;
+    }
+
+    /* ── FAQ (editorial accordion) ──────────────── */
+    .faq-section { background: var(--bg); }
+    .faq-list { max-width: 760px; margin-top: 4rem; }
+    .faq-item {
+      border-bottom: 1px solid var(--border); cursor: pointer;
+      transition: background 0.2s;
+    }
+    .faq-item:first-child { border-top: 1px solid var(--border); }
+    .faq-item:hover { background: rgba(255,255,255,0.015); }
+    .faq-q {
+      font-family: 'Cormorant Garamond', serif; font-size: 1.15rem; font-weight: 700;
+      display: flex; align-items: flex-start; justify-content: space-between; gap: 1.5rem;
+      padding: 1.75rem 0;
+    }
+    .faq-plus { color: var(--accent); font-size: 1.1rem; flex-shrink: 0; transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1); line-height: 1.2; }
+    .faq-item.open .faq-plus { transform: rotate(45deg); }
+    .faq-a { font-size: 0.88rem; color: var(--text-dim); line-height: 1.75; max-height: 0; overflow: hidden; transition: max-height 0.4s ease, padding-bottom 0.2s; }
+    .faq-item.open .faq-a { max-height: 200px; padding-bottom: 1.5rem; }
+
+    /* ── CTA BAND ──────────────────────────────── */
+    .cta-band { background: var(--accent); padding: 5rem 3rem; text-align: center; }
+    .cta-band h2 { font-family: 'Cormorant Garamond', serif; font-size: clamp(2.5rem,5vw,4rem); font-weight: 700; font-style: italic; color: white; line-height: 1.1; margin-bottom: 1.5rem; }
+    .cta-band p { font-size: 1rem; color: rgba(255,255,255,0.72); margin-bottom: 2.5rem; }
+    .btn-white { background: white; color: var(--accent); padding: 1rem 3rem; font-family: 'Outfit', sans-serif; font-size: 0.95rem; font-weight: 600; border: none; cursor: pointer; text-decoration: none; display: inline-block; letter-spacing: 0.04em; transition: transform 0.15s, opacity 0.15s; }
+    .btn-white:hover { transform: translateY(-2px); opacity: 0.92; }
+    .cta-band-sub { margin-top: 1.25rem; font-family: 'Space Mono', monospace; font-size: 0.63rem; color: rgba(255,255,255,0.5); letter-spacing: 0.15em; }
+
+    /* ── FOOTER ────────────────────────────────── */
+    footer { border-top: 1px solid var(--border); padding: 4rem 3rem; display: flex; justify-content: space-between; align-items: flex-start; background: var(--bg-1); }
+    .footer-logo { font-family: 'Cormorant Garamond', serif; font-size: 1.2rem; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; margin-bottom: 0.85rem; }
+    .footer-logo span { color: var(--accent); }
+    .footer-desc { font-size: 0.78rem; color: var(--text-dim); line-height: 1.7; max-width: 240px; }
+    .footer-links { display: flex; gap: 5rem; }
+    .footer-col h4 { font-family: 'Space Mono', monospace; font-size: 0.62rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 1rem; }
+    .footer-col ul { list-style: none; }
+    .footer-col ul li { margin-bottom: 0.55rem; }
+    .footer-col ul a { color: var(--text-dim); text-decoration: none; font-size: 0.84rem; transition: color 0.2s; }
+    .footer-col ul a:hover { color: var(--text); }
+    .footer-bottom { border-top: 1px solid var(--border); padding: 1.5rem 3rem; display: flex; justify-content: space-between; background: var(--bg-1); }
+    .footer-bottom p { font-family: 'Space Mono', monospace; font-size: 0.58rem; color: var(--text-dim); letter-spacing: 0.1em; }
+
+    /* ── MOBILE STICKY CTA ─────────────────────── */
+    #mobile-cta {
+      display: none;
+      position: fixed; bottom: 0; left: 0; right: 0; z-index: 90;
+      background: var(--bg-1); border-top: 1px solid var(--border);
+      padding: 0.85rem 1.5rem;
+      transform: translateY(100%);
+      transition: transform 0.35s cubic-bezier(0.16,1,0.3,1);
+    }
+    #mobile-cta.visible { transform: translateY(0); }
+    #mobile-cta a { display: block; background: var(--accent); color: white; text-align: center; padding: 0.9rem; font-family: 'Outfit', sans-serif; font-size: 0.9rem; font-weight: 500; text-decoration: none; letter-spacing: 0.03em; }
+    #mobile-cta p { font-family: 'Space Mono', monospace; font-size: 0.58rem; color: var(--text-dim); text-align: center; margin-top: 0.5rem; letter-spacing: 0.1em; }
+
+    /* ── ANIMATIONS ────────────────────────────── */
+    @keyframes fadeUp { from{opacity:0;transform:translateY(22px)} to{opacity:1;transform:none} }
+
+    /* ── RESPONSIVE ────────────────────────────── */
+    @media (max-width: 960px) {
+      nav { padding: 1rem 1.5rem; }
+      nav ul { display: none; }
+      .hamburger { display: flex; }
+      .hero { grid-template-columns: 1fr; padding: 6rem 1.5rem 4rem; min-height: auto; }
+      .hero-visual { display: none; }
+      section { padding: 5rem 1.5rem; }
+      .how-header { grid-template-columns: 1fr; gap: 2rem; }
+      .how-flow { grid-template-columns: 1fr; }
+      .how-connector { display: none; }
+      .comparison-grid { grid-template-columns: 1fr; }
+      .comp-bottom { grid-column: 1; }
+      .demo-grid { grid-template-columns: 1fr; }
+      .bento-grid { grid-template-columns: 1fr 1fr; }
+      .bento-card.featured { grid-column: 1 / 3; grid-row: auto; }
+      .bento-card.twitter-card, .bento-card.ig-card, .bento-card.nl-card, .bento-card.seo-card { grid-column: auto; grid-row: auto; }
+      .pricing-grid { grid-template-columns: 1fr; max-width: 100%; }
+      .testimonials-grid { grid-template-columns: 1fr; }
+      .wol-grid { grid-template-columns: 1fr 1fr; }
+      footer { flex-direction: column; gap: 3rem; padding: 3rem 1.5rem; }
+      .footer-links { gap: 2.5rem; flex-wrap: wrap; }
+      .footer-bottom { padding: 1.25rem 1.5rem; flex-direction: column; gap: 0.4rem; }
+      .hero-stats { gap: 2rem; }
+      #mobile-cta { display: block; }
+      #announcement-bar { font-size: 0.58rem; padding: 0 2.5rem; }
+      .cta-band { padding: 4rem 1.5rem; }
+      .wall-of-love { padding: 2.5rem 1.5rem; }
+    }
+    @media (max-width: 600px) {
+      .wol-grid { grid-template-columns: 1fr; }
+      .bento-grid { grid-template-columns: 1fr; }
+      .bento-card.featured { grid-column: 1; }
+      .hero-stats { gap: 1.5rem; }
+    }
+
+    /* ══════════════════════════════════════════════
+       CINEMATIC SCROLL SECTION — Chaos → PRISM → Clarity
+    ══════════════════════════════════════════════ */
+    .cinematic-wrapper {
+      position: relative;
+      height: 500vh;
+      background: var(--bg);
+    }
+    .cinematic-stage {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #07080a;
+      transition: background 0.5s ease;
+    }
+
+    /* ── Chaos words layer ─────────────────────── */
+    .chaos-layer {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 1;
+    }
+    .chaos-word {
+      position: absolute;
+      color: rgba(240, 82, 42, 0.55);
+      will-change: transform, opacity, filter;
+      user-select: none;
+      white-space: nowrap;
+      line-height: 1;
+      transition: none;
+    }
+
+    /* ── Cinematic labels ──────────────────────── */
+    .cine-label {
+      position: absolute;
+      z-index: 5;
+      pointer-events: none;
+      will-change: opacity, transform;
+    }
+    .cine-label-chaos {
+      bottom: 13%;
+      left: 50%;
+      transform: translateX(-50%);
+      font-family: 'Space Mono', monospace;
+      font-size: 0.72rem;
+      letter-spacing: 0.35em;
+      text-transform: uppercase;
+      color: rgba(240,82,42,0.75);
+    }
+    .cine-label-input {
+      top: calc(50% - 260px);
+      left: 50%;
+      font-family: 'Space Mono', monospace;
+      font-size: 0.68rem;
+      letter-spacing: 0.28em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.5);
+    }
+    .cine-label-clarity {
+      bottom: 13%;
+      left: 50%;
+      transform: translateX(-50%);
+      font-family: 'Cormorant Garamond', serif;
+      font-size: clamp(1.4rem, 3vw, 2rem);
+      font-style: italic;
+      font-weight: 300;
+      color: rgba(255,255,255,0.85);
+      white-space: nowrap;
+      letter-spacing: -0.01em;
+    }
+    .cine-label-clarity em {
+      font-style: normal;
+      color: var(--accent);
+    }
+
+    /* ── Phone mockup ──────────────────────────── */
+    .prism-phone {
+      position: absolute;
+      width: 200px;
+      height: 408px;
+      border-radius: 34px;
+      background: #111;
+      border: 2px solid #2a2a2a;
+      box-shadow:
+        0 0 0 1px rgba(255,255,255,0.04),
+        0 24px 80px rgba(0,0,0,0.7),
+        inset 0 1px 0 rgba(255,255,255,0.06);
+      z-index: 4;
+      will-change: transform, opacity;
+      overflow: hidden;
+    }
+    /* Side buttons */
+    .prism-phone::before {
+      content: '';
+      position: absolute;
+      right: -4px; top: 80px;
+      width: 3px; height: 50px;
+      background: #1e1e1e;
+      border-radius: 0 3px 3px 0;
+      box-shadow: 0 60px 0 #1e1e1e;
+    }
+    .prism-phone::after {
+      content: '';
+      position: absolute;
+      left: -4px; top: 100px;
+      width: 3px; height: 35px;
+      background: #1e1e1e;
+      border-radius: 3px 0 0 3px;
+      box-shadow: 0 50px 0 #1e1e1e, 0 -50px 0 #1e1e1e;
+    }
+    .phone-notch {
+      position: absolute;
+      top: 0; left: 50%;
+      transform: translateX(-50%);
+      width: 70px; height: 24px;
+      background: #111;
+      border-radius: 0 0 18px 18px;
+      border: 2px solid #2a2a2a;
+      border-top: none;
+      z-index: 10;
+    }
+    .phone-screen {
+      position: absolute;
+      inset: 6px;
+      border-radius: 28px;
+      background: #0a0a0a;
+      overflow: hidden;
+    }
+    /* Glass reflection */
+    .phone-screen::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0; height: 55%;
+      border-radius: 28px 28px 0 0;
+      background: linear-gradient(160deg, rgba(255,255,255,0.045) 0%, transparent 60%);
+      pointer-events: none;
+      z-index: 20;
+    }
+
+    /* ── Processing ring ───────────────────────── */
+    .phone-ring {
+      position: absolute;
+      width: 230px; height: 438px;
+      border-radius: 38px;
+      border: 1.5px solid transparent;
+      border-top-color: var(--accent);
+      border-right-color: rgba(240,82,42,0.25);
+      will-change: transform, opacity;
+      z-index: 3;
+      transform-origin: center;
+    }
+    .phone-ring.spinning {
+      animation: cine-ring-spin 1.4s linear infinite;
+    }
+    @keyframes cine-ring-spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    /* Glow ring */
+    .phone-ring-glow {
+      position: absolute;
+      width: 250px; height: 456px;
+      border-radius: 42px;
+      border: 1px solid rgba(240,82,42,0.12);
+      will-change: opacity;
+      z-index: 3;
+      box-shadow: 0 0 30px rgba(240,82,42,0.08);
+    }
+
+    /* ── PRISM logo in phone ───────────────────── */
+    .phone-logo {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 1.1rem;
+      font-weight: 700;
+      letter-spacing: 0.25em;
+      text-transform: uppercase;
+      color: var(--accent);
+      will-change: opacity, transform;
+      z-index: 15;
+      white-space: nowrap;
+    }
+
+    /* ── Platform cards inside phone ──────────── */
+    .phone-cards-layer {
+      position: absolute;
+      inset: 0;
+      z-index: 12;
+      overflow: hidden;
+      border-radius: 28px;
+    }
+    .pcard-wrap {
+      position: absolute;
+      left: 0; right: 0;
+      will-change: transform, opacity;
+    }
+    /* Compact phone-native platform cards */
+    .pcard {
+      margin: 0 6px;
+      border-radius: 10px;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    }
+    .pcard-li  { background: #1b1f23; border: 1px solid #3d3d3d; }
+    .pcard-tw  { background: #000; border: 1px solid #2f3336; }
+    .pcard-nl  { background: #fff; border: 1px solid #e0e0e0; }
+    .pcard-ig  { background: #000; border: 1px solid #262626; }
+    .pcard-seo { background: #202124; border: 1px solid #3c4043; }
+
+    /* LinkedIn pcard */
+    .pcard-li-header { padding: 8px 9px 5px; display: flex; gap: 7px; align-items: center; border-bottom: 1px solid #333; }
+    .pcard-li-av { width: 26px; height: 26px; border-radius: 50%; background: linear-gradient(135deg,#0a66c2,#004182); display: flex; align-items: center; justify-content: center; color: white; font-size: 0.62rem; font-weight: 700; flex-shrink: 0; }
+    .pcard-li-name { font-size: 0.62rem; font-weight: 600; color: #e8e8e8; }
+    .pcard-li-sub { font-size: 0.52rem; color: #888; }
+    .pcard-li-body { padding: 7px 9px; font-size: 0.6rem; color: #ccc; line-height: 1.5; }
+    .pcard-li-actions { padding: 5px 9px; border-top: 1px solid #333; display: flex; gap: 10px; font-size: 0.55rem; color: #777; }
+
+    /* Twitter pcard */
+    .pcard-tw-tweet { padding: 7px 9px; border-bottom: 1px solid #2f3336; display: flex; gap: 6px; }
+    .pcard-tw-av { width: 22px; height: 22px; border-radius: 50%; background: linear-gradient(135deg,#1d9bf0,#0d8de0); flex-shrink: 0; }
+    .pcard-tw-name { font-size: 0.6rem; font-weight: 700; color: #e7e9ea; }
+    .pcard-tw-handle { font-size: 0.55rem; color: #71767b; }
+    .pcard-tw-body { font-size: 0.6rem; color: #e7e9ea; line-height: 1.45; margin-top: 2px; }
+    .pcard-tw-actions { display: flex; gap: 8px; margin-top: 4px; font-size: 0.52rem; color: #71767b; }
+    .pcard-tw-line { width: 2px; background: #2f3336; margin: 0 9px; align-self: stretch; min-height: 8px; }
+
+    /* Newsletter pcard */
+    .pcard-nl-bar { background: #e8eaed; padding: 5px 9px; font-size: 0.55rem; color: #5f6368; border-bottom: 1px solid #dadce0; }
+    .pcard-nl-subj { font-weight: 600; color: #202124; }
+    .pcard-nl-header { padding: 6px 9px 4px; display: flex; gap: 6px; align-items: center; border-bottom: 1px solid #e0e0e0; }
+    .pcard-nl-av { width: 22px; height: 22px; border-radius: 50%; background: linear-gradient(135deg,#f0522a,#ff7043); display: flex; align-items: center; justify-content: center; color: white; font-size: 0.55rem; font-weight: 700; flex-shrink: 0; }
+    .pcard-nl-from { font-size: 0.58rem; font-weight: 600; color: #202124; }
+    .pcard-nl-addr { font-size: 0.5rem; color: #5f6368; }
+    .pcard-nl-body { padding: 6px 9px 8px; font-size: 0.58rem; color: #333; line-height: 1.55; font-family: Georgia, serif; }
+
+    /* Instagram pcard */
+    .pcard-ig-header { padding: 6px 9px; display: flex; align-items: center; gap: 6px; border-bottom: 1px solid #262626; }
+    .pcard-ig-av { width: 22px; height: 22px; border-radius: 50%; padding: 2px; background: linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888); flex-shrink: 0; }
+    .pcard-ig-av-inner { width: 100%; height: 100%; border-radius: 50%; background: linear-gradient(135deg,#667eea,#764ba2); display: block; }
+    .pcard-ig-user { font-size: 0.6rem; font-weight: 600; color: #fff; }
+    .pcard-ig-photo { width: 100%; height: 72px; background: linear-gradient(135deg,#667eea 0%,#764ba2 50%,#f093fb 100%); }
+    .pcard-ig-actions { padding: 5px 9px 3px; font-size: 0.9rem; color: #fff; display: flex; gap: 7px; }
+    .pcard-ig-caption { padding: 0 9px 7px; font-size: 0.55rem; color: #e0e0e0; line-height: 1.45; }
+    .pcard-ig-tags { color: #a8c3f7; }
+
+    /* SEO pcard */
+    .pcard-seo-bar { padding: 5px 9px; background: #303134; border-bottom: 1px solid #3c4043; font-size: 0.52rem; color: #9aa0a6; display: flex; align-items: center; gap: 4px; }
+    .pcard-seo-fav { width: 12px; height: 12px; background: #5f6368; border-radius: 50%; flex-shrink: 0; }
+    .pcard-seo-body { padding: 7px 9px 9px; }
+    .pcard-seo-url { font-size: 0.52rem; color: #8ab4f8; margin-bottom: 2px; }
+    .pcard-seo-title { font-size: 0.68rem; color: #8ab4f8; line-height: 1.3; margin-bottom: 3px; font-weight: 500; }
+    .pcard-seo-desc { font-size: 0.56rem; color: #bdc1c6; line-height: 1.5; }
+
+    /* ── CTA at phase 4 ────────────────────────── */
+    .cine-cta {
+      position: absolute;
+      bottom: 14%;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 6;
+      will-change: opacity;
+      text-align: center;
+    }
+    .cine-cta a {
+      display: inline-block;
+      background: var(--accent);
+      color: white;
+      padding: 0.85rem 2.75rem;
+      font-family: 'Outfit', sans-serif;
+      font-size: 1rem;
+      font-weight: 500;
+      text-decoration: none;
+      letter-spacing: 0.04em;
+      transition: opacity 0.2s, transform 0.3s cubic-bezier(0.34,1.56,0.64,1);
+    }
+    .cine-cta a:hover { opacity: 0.88; transform: translateY(-2px); }
+    .cine-cta-sub {
+      margin-top: 0.75rem;
+      font-family: 'Space Mono', monospace;
+      font-size: 0.6rem;
+      color: rgba(255,255,255,0.35);
+      letter-spacing: 0.1em;
+      white-space: nowrap;
+    }
+
+    /* ── Mobile: simplified fade ──────────────── */
+    @media (max-width: 768px) {
+      .cinematic-wrapper { height: 300vh; }
+      .chaos-word { font-size: clamp(0.65rem, 2.5vw, 1rem) !important; }
+      .prism-phone { width: 160px; height: 326px; }
+      .phone-ring { width: 184px; height: 350px; }
+      .phone-ring-glow { width: 200px; height: 364px; }
+      .cine-label-clarity { font-size: 1.1rem; }
+    }
+  </style>
+</head>
+<body class="bar-visible">
+
+<!-- ─── ANNOUNCEMENT BAR ──────────────────────── -->
+<div id="announcement-bar">
+  🔥 Launch week price — <strong style="margin:0 0.25rem">$29</strong> for the first 1,000 customers <s style="opacity:0.6">$99</s>
+  <a href="#pricing">Claim yours →</a>
+  <button id="bar-close" aria-label="Dismiss announcement">×</button>
+</div>
+
+<!-- ─── NAV ──────────────────────────────────── -->
+<nav id="navbar">
+  <a href="#" class="nav-logo">
+    <svg class="prism-svg" viewBox="0 0 26 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <polygon points="13,1 25,23 1,23" stroke="rgba(255,255,255,0.88)" stroke-width="1.4" fill="none" stroke-linejoin="round"/>
+      <line class="ray ray-1" x1="13" y1="20" x2="3"  y2="26" stroke="#f0522a" stroke-width="1.6" stroke-linecap="round"/>
+      <line class="ray ray-2" x1="13" y1="20" x2="8"  y2="27" stroke="#ffaa00" stroke-width="1.6" stroke-linecap="round"/>
+      <line class="ray ray-3" x1="13" y1="20" x2="13" y2="28" stroke="#00dd88" stroke-width="1.6" stroke-linecap="round"/>
+      <line class="ray ray-4" x1="13" y1="20" x2="18" y2="27" stroke="#00ddff" stroke-width="1.6" stroke-linecap="round"/>
+      <line class="ray ray-5" x1="13" y1="20" x2="23" y2="26" stroke="#aa44ff" stroke-width="1.6" stroke-linecap="round"/>
+    </svg>
+    PRI<span>S</span>M
+  </a>
+  <ul>
+    <li><a href="#how">How it works</a></li>
+    <li><a href="#demo">Demo</a></li>
+    <li><a href="#pricing">Pricing</a></li>
+    <li><a href="#faq">FAQ</a></li>
+    <li><a href="#pricing" class="nav-cta">Lifetime Access — $29</a></li>
+  </ul>
+  <button class="hamburger" id="hamburger" aria-label="Menu">
+    <span></span><span></span><span></span>
+  </button>
+</nav>
+
+<!-- mobile overlay -->
+<div id="mobile-menu">
+  <a href="#how" onclick="closeMobileMenu()">How it works</a>
+  <a href="#demo" onclick="closeMobileMenu()">Demo</a>
+  <a href="#pricing" onclick="closeMobileMenu()">Pricing</a>
+  <a href="#faq" onclick="closeMobileMenu()">FAQ</a>
+  <a href="#pricing" class="mm-cta" onclick="closeMobileMenu()">$29 Lifetime</a>
+</div>
+
+<!-- ─── HERO ──────────────────────────────────── -->
+<section class="hero">
+  <div class="hero-left">
+    <div class="hero-eyebrow">AI Content Repurposing</div>
+    <h1>Write once.<br><em>Own every</em><br>feed.</h1>
+    <p class="hero-sub">Your best content, everywhere it belongs. PRISM transforms any piece into platform-native LinkedIn, Twitter/X, newsletter, Instagram, and SEO — in under 10 seconds.</p>
+    <div class="hero-actions">
+      <a href="#pricing" class="btn-primary magnetic-btn">Make it yours — $29</a>
+      <a href="#demo" class="btn-ghost">Watch it happen ↓</a>
+    </div>
+    <div class="social-proof-row">
+      <div class="avatar-stack">
+        <div class="av" style="background:linear-gradient(135deg,#f0522a,#ff7043)">S</div>
+        <div class="av" style="background:linear-gradient(135deg,#0a66c2,#1d9bf0)">M</div>
+        <div class="av" style="background:linear-gradient(135deg,#00ddb4,#00b89c)">J</div>
+        <div class="av" style="background:linear-gradient(135deg,#9c27b0,#673ab7)">A</div>
+        <div class="av" style="background:linear-gradient(135deg,#e91e63,#c2185b)">R</div>
+      </div>
+      <div class="sp-text">Join <strong>14,000+</strong> creators already using PRISM</div>
+    </div>
+    <div class="stars-row">
+      <span class="stars">★★★★★</span>
+      <span class="stars-label"><strong>4.9/5</strong> from 2,400+ reviews</span>
+    </div>
+    <div class="hero-stats">
+      <div>
+        <div class="stat-num" data-countup="5" data-suffix="">5</div>
+        <div class="stat-label">Output formats</div>
+      </div>
+      <div>
+        <div class="stat-num" data-countup="10" data-prefix="&lt;" data-suffix="s">&lt;10s</div>
+        <div class="stat-label">Generation time</div>
+      </div>
+      <div>
+        <div class="stat-num" data-countup="3" data-suffix="/day">3/day</div>
+        <div class="stat-label">Free forever</div>
+      </div>
+      <div>
+        <div class="stat-num" data-countup="29" data-prefix="$">$29</div>
+        <div class="stat-label">Lifetime access</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="hero-visual">
+    <!-- Input card -->
+    <div class="vis-card" style="animation:fadeUp 0.9s ease both 0.4s">
+      <div class="vis-card-label">
+        <span>Input — Your Content</span>
+        <span class="vis-status">Ready</span>
+      </div>
+      <div class="vis-text-lines">
+        <div class="vis-line w100"></div>
+        <div class="vis-line w85"></div>
+        <div class="vis-line w100b"></div>
+        <div class="vis-line w60"></div>
+        <div class="vis-line w90"></div>
+      </div>
+    </div>
+
+    <!-- Flow -->
+    <div class="vis-flow">
+      <div class="vis-flow-dot"></div>
+      <div class="vis-flow-dot"></div>
+      <div class="vis-flow-dot"></div>
+    </div>
+
+    <!-- Processor -->
+    <div class="vis-processor" style="animation:fadeUp 0.7s ease both 0.9s, glow-pulse 2s ease-in-out 1.5s infinite">◆ AI</div>
+
+    <!-- Flow -->
+    <div class="vis-flow">
+      <div class="vis-flow-dot"></div>
+      <div class="vis-flow-dot"></div>
+      <div class="vis-flow-dot"></div>
+    </div>
+
+    <!-- Platform pills -->
+    <div class="vis-platforms">
+      <div class="vis-pill"><span class="vis-pill-icon">💼</span>LinkedIn</div>
+      <div class="vis-pill"><span class="vis-pill-icon">𝕏</span>Twitter</div>
+      <div class="vis-pill"><span class="vis-pill-icon">✉</span>Newsletter</div>
+      <div class="vis-pill"><span class="vis-pill-icon">⬜</span>Instagram</div>
+      <div class="vis-pill"><span class="vis-pill-icon">⊕</span>SEO</div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── WALL OF LOVE ───────────────────────────── -->
+<div class="wall-of-love">
+  <div class="wol-label" data-animate>What people are saying</div>
+  <div class="wol-grid" data-animate data-delay="1">
+    <div class="wol-card">
+      <div class="wol-header">
+        <div class="wol-avatar" style="background:linear-gradient(135deg,#f0522a,#ff7043)">S</div>
+        <div><div class="wol-name">Sarah K.</div><div class="wol-handle">@sarahkcontent</div></div>
+        <div class="wol-platform">𝕏 Twitter</div>
+      </div>
+      <div class="wol-text">ok this is insane. pasted my blog post into PRISM and had <strong>5 platform-ready posts in 9 seconds.</strong> this replaces half my content workflow</div>
+    </div>
+    <div class="wol-card">
+      <div class="wol-header">
+        <div class="wol-avatar" style="background:linear-gradient(135deg,#0a66c2,#1d9bf0)">M</div>
+        <div><div class="wol-name">Marcus T.</div><div class="wol-handle">@marcustbuilds</div></div>
+        <div class="wol-platform">𝕏 Twitter</div>
+      </div>
+      <div class="wol-text">the LinkedIn output from PRISM is <strong>genuinely scary good.</strong> it doesn't just shorten your post — it rewrites it in the exact voice that performs on that platform</div>
+    </div>
+    <div class="wol-card">
+      <div class="wol-header">
+        <div class="wol-avatar" style="background:linear-gradient(135deg,#00ddb4,#00b89c)">J</div>
+        <div><div class="wol-name">Jamie R.</div><div class="wol-handle">@jamienewsletter</div></div>
+        <div class="wol-platform">𝕏 Twitter</div>
+      </div>
+      <div class="wol-text">$29 lifetime for PRISM is <strong>the dumbest deal I've ever seen</strong> (in the best way). I was about to hire a VA just for social repurposing. not anymore</div>
+    </div>
+    <div class="wol-card">
+      <div class="wol-header">
+        <div class="wol-avatar" style="background:linear-gradient(135deg,#9c27b0,#673ab7)">A</div>
+        <div><div class="wol-name">Aisha M.</div><div class="wol-handle">@aishacreatess</div></div>
+        <div class="wol-platform">𝕏 Twitter</div>
+      </div>
+      <div class="wol-text">used PRISM on my podcast transcript. got a Twitter thread, LinkedIn post, newsletter intro AND Instagram caption. <strong>all five in under 15 seconds.</strong> building different</div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── HOW IT WORKS ──────────────────────────── -->
+<section class="how-works" id="how">
+  <div class="how-header">
+    <div>
+      <div class="section-label" data-animate>Process</div>
+      <h2 class="section-title" data-animate data-delay="1">Post more.<br><em>Think less.</em></h2>
+    </div>
+    <p class="how-desc" data-animate data-delay="2">No more staring at a blank draft for every platform. PRISM understands each channel's tone, structure, and character limits — and adapts your content for all of them at once.</p>
+  </div>
+  <div class="how-flow">
+    <div class="how-step" data-animate>
+      <div class="how-step-num">01 — INPUT</div>
+      <div class="how-step-mockup">
+        <div class="how-step-mockup-bar">
+          <div class="how-step-mockup-dot" style="background:#ff5f57"></div>
+          <div class="how-step-mockup-dot" style="background:#ffbd2e"></div>
+          <div class="how-step-mockup-dot" style="background:#27c93f"></div>
+          <span style="font-family:'Space Mono',monospace;font-size:0.55rem;color:var(--text-dim);margin-left:0.5rem">your-content.txt</span>
+        </div>
+        <div class="how-step-mockup-inner">The office was never about location. It was about shared context. The most productive remote teams treat async as a skill…</div>
+      </div>
+      <div class="how-step-title">Paste your content</div>
+      <p class="how-step-desc">Any blog post, script, or article. Any length. PRISM reads full context before generating.</p>
+    </div>
+    <div class="how-connector" data-animate data-delay="1">→</div>
+    <div class="how-step" data-animate data-delay="1">
+      <div class="how-step-num">02 — PROCESS</div>
+      <div class="how-step-mockup">
+        <div class="how-step-mockup-bar">
+          <div class="how-step-mockup-dot" style="background:var(--accent)"></div>
+          <span style="font-family:'Space Mono',monospace;font-size:0.55rem;color:var(--accent);margin-left:0.5rem;animation:blink-dot 1.5s infinite">Processing…</span>
+        </div>
+        <div class="how-step-mockup-inner" style="display:flex;flex-direction:column;gap:5px">
+          <div style="height:6px;background:linear-gradient(90deg,var(--accent),transparent);border-radius:3px;width:80%;animation:shimmer 1.5s infinite"></div>
+          <div style="height:6px;background:linear-gradient(90deg,var(--accent),transparent);border-radius:3px;width:60%;animation:shimmer 1.5s 0.3s infinite"></div>
+          <div style="height:6px;background:linear-gradient(90deg,var(--accent),transparent);border-radius:3px;width:90%;animation:shimmer 1.5s 0.6s infinite"></div>
+        </div>
+      </div>
+      <div class="how-step-title">AI rewrites for each channel</div>
+      <p class="how-step-desc">Platform-specific tone, structure, and character limits — adapted simultaneously for all five.</p>
+    </div>
+    <div class="how-connector" data-animate data-delay="2">→</div>
+    <div class="how-step" data-animate data-delay="2">
+      <div class="how-step-num">03 — PUBLISH</div>
+      <div class="how-step-mockup">
+        <div class="how-step-mockup-bar">
+          <div class="how-step-mockup-dot" style="background:#27c93f"></div>
+          <span style="font-family:'Space Mono',monospace;font-size:0.55rem;color:#27c93f;margin-left:0.5rem">5 outputs ready</span>
+        </div>
+        <div class="how-step-mockup-inner" style="display:flex;gap:4px;flex-wrap:wrap">
+          <span style="background:rgba(240,82,42,0.12);border:1px solid rgba(240,82,42,0.2);border-radius:4px;padding:3px 7px;font-size:0.62rem;color:var(--accent)">💼 LinkedIn</span>
+          <span style="background:rgba(240,82,42,0.12);border:1px solid rgba(240,82,42,0.2);border-radius:4px;padding:3px 7px;font-size:0.62rem;color:var(--accent)">𝕏 Twitter</span>
+          <span style="background:rgba(240,82,42,0.12);border:1px solid rgba(240,82,42,0.2);border-radius:4px;padding:3px 7px;font-size:0.62rem;color:var(--accent)">✉ Email</span>
+          <span style="background:rgba(240,82,42,0.12);border:1px solid rgba(240,82,42,0.2);border-radius:4px;padding:3px 7px;font-size:0.62rem;color:var(--accent)">📸 IG</span>
+          <span style="background:rgba(240,82,42,0.12);border:1px solid rgba(240,82,42,0.2);border-radius:4px;padding:3px 7px;font-size:0.62rem;color:var(--accent)">⊕ SEO</span>
+        </div>
+      </div>
+      <div class="how-step-title">Copy &amp; publish</div>
+      <p class="how-step-desc">One click to copy. Formatting perfect, hashtags included. Ready to post immediately.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ─── TIME SAVINGS COMPARISON ───────────────── -->
+<section class="comparison-section">
+  <div class="section-label" data-animate>Time Saved</div>
+  <h2 class="section-title" data-animate data-delay="1">Manual vs.<br><em>PRISM.</em></h2>
+  <div class="comparison-grid" style="margin-top:4rem">
+    <div class="comp-side without" data-animate>
+      <div class="comp-label bad">❌ Without PRISM</div>
+      <ul class="comp-tasks">
+        <li><span>LinkedIn post</span><span class="time-bad">~60 min</span></li>
+        <li><span>Twitter/X thread</span><span class="time-bad">~45 min</span></li>
+        <li><span>Newsletter intro</span><span class="time-bad">~30 min</span></li>
+        <li><span>Instagram caption</span><span class="time-bad">~20 min</span></li>
+        <li><span>SEO meta</span><span class="time-bad">~15 min</span></li>
+      </ul>
+      <div class="comp-total-bad">3h 30min</div>
+      <div class="comp-total-sub">Every. Single. Piece. Of. Content.</div>
+    </div>
+    <div class="comp-side with" data-animate data-delay="1">
+      <div class="comp-label good">✅ With PRISM</div>
+      <p class="comp-pitch">Paste your content.<br>Click once.<br>Get all five platforms.</p>
+      <div class="comp-total-good">&lt; 10 seconds</div>
+      <div class="comp-total-sub">For all five platforms, simultaneously.</div>
+    </div>
+    <div class="comp-bottom" data-animate>
+      <div class="comp-punchline">That's <span>1,260×</span> faster.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── INTERSTITIAL 1 ───────────────────────── -->
+<div class="type-moment" data-animate>
+  <p class="type-moment__eyebrow">The shift</p>
+  <h2 class="type-moment__headline">Content used to take hours.<br><em>Now it takes seconds.</em></h2>
+</div>
+
+<!-- ─── CINEMATIC: CHAOS → PRISM → CLARITY ────── -->
+<div class="cinematic-wrapper" id="cine-wrapper">
+  <div class="cinematic-stage" id="cine-stage">
+
+    <!-- Layer 1: Scattered chaos words (populated by JS) -->
+    <div class="chaos-layer" id="cine-chaos"></div>
+
+    <!-- Layer 2: "Every. Single. Week." label -->
+    <div class="cine-label cine-label-chaos" id="cine-chaos-label" style="opacity:0">
+      Every. Single. Week.
+    </div>
+
+    <!-- Layer 3: Processing ring glow (behind phone) -->
+    <div class="phone-ring-glow" id="cine-ring-glow" style="opacity:0"></div>
+
+    <!-- Layer 4: Spinning ring -->
+    <div class="phone-ring" id="cine-ring" style="opacity:0"></div>
+
+    <!-- Layer 5: "One input." label -->
+    <div class="cine-label cine-label-input" id="cine-input-label" style="opacity:0;transform:translateX(-50%) translateY(12px)">
+      One input.
+    </div>
+
+    <!-- Layer 6: The phone -->
+    <div class="prism-phone" id="cine-phone" style="opacity:0;transform:scale(0.6)">
+      <div class="phone-notch"></div>
+      <div class="phone-screen">
+        <!-- PRISM logo (phase 2) -->
+        <div class="phone-logo" id="cine-phone-logo" style="opacity:0">PRISM</div>
+
+        <!-- Platform cards layer (phase 3) -->
+        <div class="phone-cards-layer" id="cine-cards-layer">
+
+          <!-- Card 0: LinkedIn (arrives first, bottom of stack) -->
+          <div class="pcard-wrap" id="cine-card-0" style="bottom:0;opacity:0;transform:translateY(100%)">
+            <div class="pcard pcard-li">
+              <div class="pcard-li-header">
+                <div class="pcard-li-av">A</div>
+                <div>
+                  <div class="pcard-li-name">Alex Rivera <span style="color:#0a66c2;font-weight:400">· 1st</span></div>
+                  <div class="pcard-li-sub">Content Lead · 2h · 🌐</div>
+                </div>
+              </div>
+              <div class="pcard-li-body">The office was never about location.<br><br>It was about <strong style="color:#e8e8e8">shared context.</strong><br><br>I've spent 3 years studying remote teams that actually work — here's the one thing they all share:<br><br>They treat async as a SKILL.</div>
+              <div class="pcard-li-actions"><span>👍 Like</span><span>💬 Comment</span><span>↗ Repost</span></div>
+            </div>
+          </div>
+
+          <!-- Card 1: Twitter (arrives second) -->
+          <div class="pcard-wrap" id="cine-card-1" style="bottom:0;opacity:0;transform:translateY(100%)">
+            <div class="pcard pcard-tw">
+              <div style="display:flex;gap:6px;padding:3px 9px 0;align-items:center;border-bottom:1px solid #1a1a1a">
+                <span style="font-size:0.75rem;color:#e7e9ea;font-weight:900">𝕏</span>
+                <span style="font-size:0.55rem;color:#71767b;margin-left:auto">For you</span>
+              </div>
+              <div class="pcard-tw-tweet">
+                <div>
+                  <div class="pcard-tw-av"></div>
+                  <div class="pcard-tw-line"></div>
+                </div>
+                <div>
+                  <div><span class="pcard-tw-name">Alex Rivera</span> <span style="background:#1d9bf0;color:white;font-size:0.45rem;padding:1px 3px;border-radius:50%">✓</span> <span class="pcard-tw-handle">@alexrivera</span></div>
+                  <div class="pcard-tw-body">The office was never about location. It was about shared context. Here's what separates remote teams that thrive: 🧵</div>
+                  <div class="pcard-tw-actions"><span>💬 68</span><span>🔁 54</span><span>🤍 268</span></div>
+                </div>
+              </div>
+              <div class="pcard-tw-tweet">
+                <div class="pcard-tw-av" style="margin-left:0"></div>
+                <div>
+                  <div><span class="pcard-tw-name">Alex Rivera</span> <span class="pcard-tw-handle">@alexrivera</span></div>
+                  <div class="pcard-tw-body">They treat async as a SKILL — not a consolation prize.</div>
+                  <div class="pcard-tw-actions"><span>💬 42</span><span>🔁 31</span><span>🤍 425</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card 2: Newsletter -->
+          <div class="pcard-wrap" id="cine-card-2" style="bottom:0;opacity:0;transform:translateY(100%)">
+            <div class="pcard pcard-nl">
+              <div class="pcard-nl-bar">
+                <span class="pcard-nl-subj">Why your remote team is losing (and it's not location)</span>
+                <span style="margin-left:4px;background:#e8f0fe;color:#1a73e8;padding:1px 4px;border-radius:2px;font-size:0.5rem">Inbox</span>
+              </div>
+              <div class="pcard-nl-header">
+                <div class="pcard-nl-av">A</div>
+                <div>
+                  <div class="pcard-nl-from">Alex Rivera</div>
+                  <div class="pcard-nl-addr">alex@newsletter.co · to me ▾</div>
+                </div>
+                <span style="margin-left:auto;font-size:0.5rem;color:#5f6368">3h ago</span>
+              </div>
+              <div class="pcard-nl-body">Something shifted for me while studying three years of notes on high-performance remote teams. The ones that actually work have figured out that async isn't a backup plan. It's a skill...</div>
+            </div>
+          </div>
+
+          <!-- Card 3: Instagram -->
+          <div class="pcard-wrap" id="cine-card-3" style="bottom:0;opacity:0;transform:translateY(100%)">
+            <div class="pcard pcard-ig">
+              <div class="pcard-ig-header">
+                <div class="pcard-ig-av"><div class="pcard-ig-av-inner"></div></div>
+                <span class="pcard-ig-user">alexrivera_creates</span>
+              </div>
+              <div class="pcard-ig-photo"></div>
+              <div class="pcard-ig-actions">♡ 🗨 ✈ <span style="margin-left:auto">🔖</span></div>
+              <div class="pcard-ig-caption">The office was never about a building. 🏢 It was about SHARED CONTEXT. Save this if you're building a remote team. 📌<br><span class="pcard-ig-tags">#remotework #futureofwork #asyncwork</span></div>
+            </div>
+          </div>
+
+          <!-- Card 4: SEO (arrives last, top of stack) -->
+          <div class="pcard-wrap" id="cine-card-4" style="bottom:0;opacity:0;transform:translateY(100%)">
+            <div class="pcard pcard-seo">
+              <div class="pcard-seo-bar">
+                <div class="pcard-seo-fav"></div>
+                prism.io › blog › remote-work
+              </div>
+              <div class="pcard-seo-body">
+                <div class="pcard-seo-url">prism.io › blog › remote-work-shared-context</div>
+                <div class="pcard-seo-title">Remote Work Success: Why Shared Context Beats Location</div>
+                <div class="pcard-seo-desc">Discover why the most productive remote teams focus on async communication as a skill. Learn the 3 habits that separate thriving distributed teams.</div>
+              </div>
+            </div>
+          </div>
+
+        </div><!-- /phone-cards-layer -->
+      </div><!-- /phone-screen -->
+    </div><!-- /prism-phone -->
+
+    <!-- Layer 7: "Five platforms. One click." -->
+    <div class="cine-label cine-label-clarity" id="cine-clarity-label" style="opacity:0">
+      Five platforms. <em>One click.</em>
+    </div>
+
+    <!-- Layer 8: Release CTA -->
+    <div class="cine-cta" id="cine-cta" style="opacity:0">
+      <a href="#demo">Try it free →</a>
+      <div class="cine-cta-sub">No credit card · 3 repurposes/day free</div>
+    </div>
+
+  </div><!-- /cinematic-stage -->
+</div><!-- /cinematic-wrapper -->
+
+<!-- ─── DEMO ──────────────────────────────────── -->
+<section class="demo-section" id="demo">
+  <div class="section-label" data-animate>Live Demo</div>
+  <h2 class="section-title" data-animate data-delay="1">Watch it <em>happen.</em></h2>
+  <div class="demo-grid">
+    <div class="demo-input-panel">
+      <div class="panel-label">
+        <span>Your Content</span>
+        <span class="panel-dot"></span>
+      </div>
+      <textarea class="demo-textarea" id="demoInput">The future of remote work isn't about where you work — it's about how you work. Over the past three years, the most productive teams I've studied share one trait: they treat async communication as a skill, not a fallback. They write with precision, document obsessively, and create shared context that lets anyone contribute regardless of time zone. The office was never about location. It was about shared context. Remote-first companies that win are the ones building that context into their culture, not their commute.</textarea>
+      <button class="demo-run-btn magnetic-btn" id="runBtn" onclick="runPrism()">
+        <span id="btnLabel">Repurpose with PRISM</span>
+        <span class="arr" id="btnArrow">→</span>
+      </button>
+    </div>
+    <div class="demo-output-panel">
+      <div class="output-tabs">
+        <button class="output-tab active" onclick="switchTab(this,'linkedin')">LinkedIn</button>
+        <button class="output-tab" onclick="switchTab(this,'twitter')">Twitter / X</button>
+        <button class="output-tab" onclick="switchTab(this,'newsletter')">Newsletter</button>
+        <button class="output-tab" onclick="switchTab(this,'instagram')">Instagram</button>
+        <button class="output-tab" onclick="switchTab(this,'seo')">SEO Meta</button>
+      </div>
+      <div class="output-content">
+        <div class="output-placeholder" id="placeholder">
+          <div class="ph-icon">◈</div>
+          <p>Click "Repurpose with PRISM" to see platform-native outputs</p>
+        </div>
+        <div class="output-result" id="out-linkedin"></div>
+        <div class="output-result" id="out-twitter"></div>
+        <div class="output-result" id="out-newsletter"></div>
+        <div class="output-result" id="out-instagram"></div>
+        <div class="output-result" id="out-seo"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── PLATFORMS ──────────────────────────────── -->
+<section class="platforms-section">
+  <div class="section-label" data-animate>Output Formats</div>
+  <h2 class="section-title" data-animate data-delay="1">Built for how each<br><em>platform thinks.</em></h2>
+  <div class="bento-grid">
+    <!-- Featured: LinkedIn spans 2 rows -->
+    <div class="bento-card featured" data-animate>
+      <span class="bento-icon">💼</span>
+      <div class="bento-name">LinkedIn</div>
+      <p class="bento-detail">Professional tone, hook-driven opener, strategic line breaks, and a closing CTA that drives comments, shares, and profile visits. Built for the feed's algorithm.</p>
+      <div class="bento-format">≤ 3,000 chars · Hashtags included · Hook-optimized</div>
+      <div class="bento-preview">
+        <div class="bento-li-mini">
+          <div class="bento-li-mini-header">
+            <div class="bento-li-mini-av"></div>
+            <div><div class="bento-li-mini-name">Alex Rivera</div><div class="bento-li-mini-title">Content Lead · 1st</div></div>
+          </div>
+          <div class="bento-li-mini-body">The office was never about location.<br><br>It was about shared context…</div>
+          <div class="bento-li-mini-actions"><span>👍 Like</span><span>💬 Comment</span><span>↗ Share</span></div>
+        </div>
+      </div>
+    </div>
+    <!-- Twitter -->
+    <div class="bento-card twitter-card" data-animate data-delay="1">
+      <span class="bento-icon">𝕏</span>
+      <div class="bento-name">Twitter / X</div>
+      <p class="bento-detail">Numbered thread. Punchy takes, each under 280 chars. Built for retweets.</p>
+      <div class="bento-format">5–10 tweets · Thread format</div>
+      <div class="bento-preview">
+        <div class="bento-tw-mini">
+          <div class="bento-tw-mini-row">
+            <div class="bento-tw-mini-av"></div>
+            <div><div class="bento-tw-mini-name">Alex Rivera ✓</div><div class="bento-tw-mini-body">The office was never about location. It was about shared context. 🧵</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- Instagram -->
+    <div class="bento-card ig-card" data-animate data-delay="2">
+      <span class="bento-icon">📸</span>
+      <div class="bento-name">Instagram</div>
+      <p class="bento-detail">Visual-first caption with emotional hook and curated hashtag pack.</p>
+      <div class="bento-format">≤ 2,200 chars · 20–30 hashtags</div>
+    </div>
+    <!-- Newsletter -->
+    <div class="bento-card nl-card" data-animate data-delay="3">
+      <span class="bento-icon">✉</span>
+      <div class="bento-name">Newsletter</div>
+      <p class="bento-detail">Curiosity-opening intro that drives clicks to the full piece.</p>
+      <div class="bento-format">150–250 words · Conversational</div>
+    </div>
+    <!-- SEO -->
+    <div class="bento-card seo-card" data-animate data-delay="4">
+      <span class="bento-icon">⊕</span>
+      <div class="bento-name">SEO Meta</div>
+      <p class="bento-detail">Title + meta description, CTR-optimized, within Google's exact char limits.</p>
+      <div class="bento-format">Title ≤ 60 · Desc ≤ 160 chars</div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── INTERSTITIAL 2 ───────────────────────── -->
+<div class="type-moment" data-animate>
+  <p class="type-moment__eyebrow">One tool</p>
+  <h2 class="type-moment__headline">Five platforms.<br><em>One click.</em></h2>
+</div>
+
+<!-- ─── PRICING ───────────────────────────────── -->
+<section class="pricing-section" id="pricing">
+  <div class="section-label" data-animate>Pricing</div>
+  <h2 class="section-title" data-animate data-delay="1">One price.<br><em>Yours forever.</em></h2>
+  <div class="pricing-grid">
+    <div class="pricing-card" data-animate>
+      <div class="pricing-tier">Free Tier</div>
+      <div class="pricing-price"><sup>$</sup>0</div>
+      <div class="pricing-period">Forever free · 3 repurposes per day</div>
+      <ul class="pricing-features" style="margin-bottom:3rem;margin-top:1rem">
+        <li><span class="ck">✓</span> <span>3 repurposes per day</span></li>
+        <li><span class="ck">✓</span> <span>All 5 output formats</span></li>
+        <li><span class="ck">✓</span> <span>Copy to clipboard</span></li>
+        <li><span class="nx">—</span> <span>Unlimited repurposes</span></li>
+        <li><span class="nx">—</span> <span>Batch processing</span></li>
+        <li><span class="nx">—</span> <span>Custom tone settings</span></li>
+      </ul>
+      <a href="#" class="pricing-cta free">Start for free →</a>
+    </div>
+    <div class="pricing-card featured" data-animate data-delay="1">
+      <div class="pricing-badge">🔥 Best Value</div>
+      <div class="pricing-tier">Lifetime Access</div>
+      <div class="pricing-was">$99</div>
+      <div class="pricing-price"><sup>$</sup>29</div>
+      <div class="pricing-period">One-time payment · Yours forever</div>
+      <div class="pricing-savings">↓ Save $570/yr vs. hiring a content VA</div>
+      <ul class="pricing-features">
+        <li><span class="ck">✓</span> <span class="hi">Unlimited repurposes</span></li>
+        <li><span class="ck">✓</span> <span class="hi">All 5 output formats</span></li>
+        <li><span class="ck">✓</span> <span class="hi">Copy to clipboard</span></li>
+        <li><span class="ck">✓</span> <span class="hi">Batch processing</span></li>
+        <li><span class="ck">✓</span> <span class="hi">Custom tone settings</span></li>
+        <li><span class="ck">✓</span> <span class="hi">All future updates</span></li>
+      </ul>
+      <a href="#" class="pricing-cta paid magnetic-btn">Make it yours — $29 →</a>
+      <div class="stripe-note">🔒 Secure checkout via Stripe</div>
+      <div class="guarantee-badge">
+        <span class="guarantee-icon">🛡</span>
+        <span>14-day money-back guarantee — no questions asked</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── TESTIMONIALS ──────────────────────────── -->
+<section class="testimonials-section">
+  <div class="testi-header">
+    <div>
+      <div class="section-label" data-animate>Social Proof</div>
+      <h2 class="section-title" data-animate data-delay="1">What your next<br><em>hour sounds like.</em></h2>
+    </div>
+    <div class="testi-aggregate" data-animate data-delay="2">
+      <span>★★★★★</span> 4.9/5 · <span>2,400+</span> reviews · ProductHunt <span>#1</span>
+    </div>
+  </div>
+  <div class="testimonials-grid">
+    <div class="testimonial" data-animate>
+      <div class="testi-stars">★★★★★</div>
+      <p class="testimonial-text">"I write one blog post and get a week's worth of social content in under a minute. PRISM paid for itself the very first day."</p>
+      <div class="testimonial-author">
+        <div class="author-avatar" style="background:linear-gradient(135deg,#f0522a,#ff7043)">S</div>
+        <div>
+          <div class="author-name">Sarah K.</div>
+          <div class="author-handle">@sarahkcontent</div>
+          <div class="testi-tag">Content Strategist</div>
+        </div>
+      </div>
+    </div>
+    <div class="testimonial" data-animate data-delay="1">
+      <div class="testi-stars">★★★★★</div>
+      <p class="testimonial-text">"The LinkedIn output is scary good. It doesn't just shorten — it rewrites in the exact voice that performs on that platform."</p>
+      <div class="testimonial-author">
+        <div class="author-avatar" style="background:linear-gradient(135deg,#0a66c2,#1d9bf0)">M</div>
+        <div>
+          <div class="author-name">Marcus T.</div>
+          <div class="author-handle">@marcustbuilds</div>
+          <div class="testi-tag">SaaS Founder</div>
+        </div>
+      </div>
+    </div>
+    <div class="testimonial" data-animate data-delay="2">
+      <div class="testi-stars">★★★★★</div>
+      <p class="testimonial-text">"The $29 lifetime deal is absurd value. I was about to hire a VA just for social repurposing. Not anymore."</p>
+      <div class="testimonial-author">
+        <div class="author-avatar" style="background:linear-gradient(135deg,#00ddb4,#00b89c)">J</div>
+        <div>
+          <div class="author-name">Jamie R.</div>
+          <div class="author-handle">@jamienewsletter</div>
+          <div class="testi-tag">Newsletter Writer · 24k subs</div>
+        </div>
+      </div>
+    </div>
+    <div class="testimonial" data-animate>
+      <div class="testi-stars">★★★★★</div>
+      <p class="testimonial-text">"PRISM turned my podcast transcript into 5 pieces of platform-native content. I publish more consistently than ever now."</p>
+      <div class="testimonial-author">
+        <div class="author-avatar" style="background:linear-gradient(135deg,#9c27b0,#673ab7)">A</div>
+        <div>
+          <div class="author-name">Aisha M.</div>
+          <div class="author-handle">@aishacreatess</div>
+          <div class="testi-tag">Podcast Host</div>
+        </div>
+      </div>
+    </div>
+    <div class="testimonial" data-animate data-delay="1">
+      <div class="testi-stars">★★★★★</div>
+      <p class="testimonial-text">"Used to spend Sundays batch-writing content. Now I spend 15 minutes with PRISM and my whole week is scheduled. Game changer."</p>
+      <div class="testimonial-author">
+        <div class="author-avatar" style="background:linear-gradient(135deg,#e91e63,#c2185b)">R</div>
+        <div>
+          <div class="author-name">Ryan D.</div>
+          <div class="author-handle">@ryandmarks</div>
+          <div class="testi-tag">Marketing Lead</div>
+        </div>
+      </div>
+    </div>
+    <div class="testimonial" data-animate data-delay="2">
+      <div class="testi-stars">★★★★★</div>
+      <p class="testimonial-text">"The SEO meta output alone is worth $29. I was spending $200/month on an SEO copywriter just for title tags and descriptions."</p>
+      <div class="testimonial-author">
+        <div class="author-avatar" style="background:linear-gradient(135deg,#ff9800,#f44336)">T</div>
+        <div>
+          <div class="author-name">Tomas L.</div>
+          <div class="author-handle">@tomaslseo</div>
+          <div class="testi-tag">SEO Consultant</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── FAQ ───────────────────────────────────── -->
+<section class="faq-section" id="faq">
+  <div class="section-label" data-animate>Questions</div>
+  <h2 class="section-title" data-animate data-delay="1">Everything you<br><em>need to know.</em></h2>
+  <div class="faq-list" data-animate data-delay="1">
+    <div class="faq-item" onclick="toggleFaq(this)">
+      <div class="faq-q">What exactly is the free tier? <span class="faq-plus">+</span></div>
+      <div class="faq-a">3 full repurposes per day, completely free, no credit card required. Each repurpose generates all 5 output formats. Resets at midnight UTC every day.</div>
+    </div>
+    <div class="faq-item" onclick="toggleFaq(this)">
+      <div class="faq-q">Is the $29 really lifetime? <span class="faq-plus">+</span></div>
+      <div class="faq-a">Yes. One payment, no subscriptions, no renewal fees. You pay once and PRISM is yours forever — including all future updates and new features we add.</div>
+    </div>
+    <div class="faq-item" onclick="toggleFaq(this)">
+      <div class="faq-q">What AI model powers PRISM? <span class="faq-plus">+</span></div>
+      <div class="faq-a">PRISM uses best-in-class language models with carefully crafted platform-specific prompting. We continuously improve output quality — you never need to update anything on your end.</div>
+    </div>
+    <div class="faq-item" onclick="toggleFaq(this)">
+      <div class="faq-q">How long can my input be? <span class="faq-plus">+</span></div>
+      <div class="faq-a">Up to 10,000 words on the free tier. Lifetime members can paste up to 50,000 words. PRISM intelligently distills even long content into platform-appropriate lengths.</div>
+    </div>
+    <div class="faq-item" onclick="toggleFaq(this)">
+      <div class="faq-q">Can I customize the tone? <span class="faq-plus">+</span></div>
+      <div class="faq-a">Tone customization (casual, professional, bold, educational) is available on the lifetime tier. Set a global preference or adjust per-output. More controls are on the roadmap.</div>
+    </div>
+    <div class="faq-item" onclick="toggleFaq(this)">
+      <div class="faq-q">What's your refund policy? <span class="faq-plus">+</span></div>
+      <div class="faq-a">Full 14-day money-back guarantee, no questions asked. If PRISM doesn't save you real time, just email us for an instant refund. We're confident you'll love it.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── CTA BAND ──────────────────────────────── -->
+<div class="cta-band">
+  <h2>Your content.<br>Every channel.<br>Done.</h2>
+  <p>Join 14,000+ creators who turned one piece of content into five with a single click.</p>
+  <a href="#" class="btn-white magnetic-btn">Make it yours — $29</a>
+  <div class="cta-band-sub">One-time · 14-day guarantee · No subscriptions · Instant access</div>
+</div>
+
+<!-- ─── FOOTER ────────────────────────────────── -->
+<footer>
+  <div>
+    <div class="footer-logo">PRI<span>S</span>M</div>
+    <p class="footer-desc">One piece of content. Five platforms. Repurpose instantly with AI.</p>
+  </div>
+  <div class="footer-links">
+    <div class="footer-col">
+      <h4>Product</h4>
+      <ul>
+        <li><a href="#">How it Works</a></li>
+        <li><a href="#">Pricing</a></li>
+        <li><a href="#">Changelog</a></li>
+        <li><a href="#">Roadmap</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Legal</h4>
+      <ul>
+        <li><a href="#">Privacy Policy</a></li>
+        <li><a href="#">Terms of Service</a></li>
+        <li><a href="#">Refund Policy</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Support</h4>
+      <ul>
+        <li><a href="#">Contact</a></li>
+        <li><a href="#">FAQ</a></li>
+        <li><a href="#">Twitter / X</a></li>
+      </ul>
+    </div>
+  </div>
+</footer>
+<div class="footer-bottom">
+  <p>© 2025 PRISM. All rights reserved.</p>
+  <p>Built with AI · Powered by curiosity</p>
+</div>
+
+<!-- ─── MOBILE STICKY CTA ─────────────────────── -->
+<div id="mobile-cta">
+  <a href="#pricing">Make it yours — $29 →</a>
+  <p>3 uses/day free forever · No credit card needed</p>
+</div>
+
+<script>
+/* ─────────────────────────────────────────────────
+   ANNOUNCEMENT BAR
+───────────────────────────────────────────────── */
+(function() {
+  if (sessionStorage.getItem('bar-dismissed')) {
+    document.body.classList.remove('bar-visible');
+    document.body.classList.add('bar-hidden');
+  }
+  document.getElementById('bar-close').addEventListener('click', function() {
+    document.body.classList.remove('bar-visible');
+    document.body.classList.add('bar-hidden');
+    sessionStorage.setItem('bar-dismissed', '1');
+  });
+})();
+
+/* ─────────────────────────────────────────────────
+   STICKY NAV
+───────────────────────────────────────────────── */
+window.addEventListener('scroll', () => {
+  document.getElementById('navbar').classList.toggle('scrolled', window.scrollY > 50);
+  // mobile sticky CTA
+  const hero = document.querySelector('.hero');
+  if (hero) {
+    const threshold = hero.offsetHeight * 0.8;
+    document.getElementById('mobile-cta').classList.toggle('visible', window.scrollY > threshold);
+  }
+}, { passive: true });
+
+/* ─────────────────────────────────────────────────
+   HAMBURGER MENU
+───────────────────────────────────────────────── */
+document.getElementById('hamburger').addEventListener('click', function() {
+  this.classList.toggle('open');
+  document.getElementById('mobile-menu').classList.toggle('open');
+  document.body.style.overflow = document.getElementById('mobile-menu').classList.contains('open') ? 'hidden' : '';
+});
+function closeMobileMenu() {
+  document.getElementById('hamburger').classList.remove('open');
+  document.getElementById('mobile-menu').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+/* ─────────────────────────────────────────────────
+   SCROLL ANIMATIONS (IntersectionObserver)
+───────────────────────────────────────────────── */
+const animObserver = new IntersectionObserver((entries) => {
+  entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('is-visible'); animObserver.unobserve(e.target); } });
+}, { threshold: 0.15 });
+document.querySelectorAll('[data-animate]').forEach(el => animObserver.observe(el));
+
+/* ─────────────────────────────────────────────────
+   MAGNETIC BUTTONS (Upgrade 3)
+───────────────────────────────────────────────── */
+document.querySelectorAll('.magnetic-btn').forEach(btn => {
+  btn.addEventListener('mousemove', function(e) {
+    const rect = this.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    const dx = (e.clientX - cx) / (rect.width / 2);
+    const dy = (e.clientY - cy) / (rect.height / 2);
+    this.style.transform = `translate(${dx * 10}px, ${dy * 8}px)`;
+    this.style.transition = 'transform 0.1s ease';
+  });
+  btn.addEventListener('mouseleave', function() {
+    this.style.transform = '';
+    this.style.transition = 'transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1)';
+  });
+});
+
+/* ─────────────────────────────────────────────────
+   AUTO-PLAY DEMO (Upgrade 4)
+───────────────────────────────────────────────── */
+let demoAutoPlayed = false;
+const demoAutoObserver = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if (e.isIntersecting && !demoAutoPlayed && !generated) {
+      demoAutoPlayed = true;
+      demoAutoObserver.unobserve(e.target);
+      // Add live indicator
+      const label = document.getElementById('btnLabel');
+      label.textContent = 'Generating output…';
+      document.getElementById('btnArrow').textContent = '⟳';
+      // Small delay then run
+      setTimeout(() => runPrism(), 800);
+    }
+  });
+}, { threshold: 0.4 });
+const demoSection = document.querySelector('.demo-section');
+if (demoSection) demoAutoObserver.observe(demoSection);
+
+/* ─────────────────────────────────────────────────
+   COUNT-UP STATS
+───────────────────────────────────────────────── */
+function easeOutQuad(t) { return t * (2 - t); }
+function countUp(el, target, prefix, suffix, dur) {
+  const start = performance.now();
+  function step(now) {
+    const p = Math.min((now - start) / dur, 1);
+    const val = Math.round(easeOutQuad(p) * target);
+    el.textContent = (prefix || '') + val + (suffix || '');
+    if (p < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+const statsObserver = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if (!e.isIntersecting) return;
+    const el = e.target;
+    const target = parseInt(el.dataset.countup);
+    const prefix = el.dataset.prefix || '';
+    const suffix = el.dataset.suffix || '';
+    countUp(el, target, prefix, suffix, 1400);
+    statsObserver.unobserve(el);
+  });
+}, { threshold: 0.5 });
+document.querySelectorAll('[data-countup]').forEach(el => statsObserver.observe(el));
+
+/* ─────────────────────────────────────────────────
+   FAQ
+───────────────────────────────────────────────── */
+function toggleFaq(el) { el.classList.toggle('open'); }
+
+/* ─────────────────────────────────────────────────
+   DEMO — OUTPUT DATA
+───────────────────────────────────────────────── */
+const OUTPUTS = {
+  linkedin: `The office was never about location.\n\nIt was about shared context.\n\nI've spent three years studying remote teams that actually work — not just "we do standups on Zoom" work, but genuinely high-output, low-drama distributed teams.\n\nHere's the one thing they all have in common:\n\nThey treat async communication as a SKILL. Not a workaround. A skill.\n\nWhat that looks like in practice:\n\n→ Every message is intentional\n→ Docs exist before questions are asked\n→ Context travels across time zones\n\nThe companies winning at remote aren't just flexible on location.\n\nThey've fundamentally rethought how information flows.\n\nThe future of work isn't remote.\n\nIt's intentional.\n\n#RemoteWork #Leadership #FutureOfWork #AsyncCommunication`,
+
+  twitter: [
+    "The office was never about location.\n\nIt was about shared context.\n\nHere's what separates remote teams that thrive from those that slowly fall apart: 🧵",
+    "The most productive distributed teams I've studied all share ONE trait:\n\nThey treat async communication as a SKILL — not a consolation prize.",
+    "What that actually looks like:\n\n→ Writing with precision (every message earns its send)\n→ Documenting obsessively (if it isn't written, it didn't happen)\n→ Building shared context across time zones",
+    "Here's the insight that unlocks everything:\n\nShared context is what an office actually produces.\n\nNot proximity. Not overhead lighting. Not \"culture.\" Just: aligned people.",
+    "Remote-first companies that WIN build shared context into their culture.\n\nNot into their Zoom calendar. Not into their Slack channels.\n\nInto how they THINK and COMMUNICATE.",
+    "The future of work isn't remote.\n\nIt's intentional.\n\n→ Save this if you're building a distributed team."
+  ],
+
+  newsletter: `Something shifted for me this week while combing through three years of notes on high-performance remote teams.\n\nThe ones that really work — and I mean work, not just "everyone shows up to standups" — don't talk about remote work the way most companies do. They've moved past the debate entirely.\n\nBecause they figured out that the office was never about a building.\n\nIt was about shared context.\n\nThis week, I'm breaking down exactly how the best distributed teams manufacture that context on purpose — and why it's a genuine competitive advantage. It starts with one counterintuitive insight: async isn't a backup plan. It's a skill.\n\nThe full breakdown is below.`,
+
+  instagram: `The office was never about a building. 🏢\n\nIt was about SHARED CONTEXT.\n\nThe best remote teams figured out how to build that anyway.\n\nHere's what they do differently:\n\n✦ They write with precision\n✦ They document obsessively  \n✦ They build context that crosses time zones\n\nThe future of remote work isn't about WHERE you are.\n\nIt's about HOW you communicate.\n\nSave this if you're building a remote team. 📌\n.\n.\n#remotework #futureofwork #asyncwork #remoteteams #leadership #productivitytips #workanywhere #remotefirst #teamculture #worksmarter #distributedteams #startuplife #buildingateam #entrepreneurmindset #remotejobs`,
+
+  seo: {
+    title: "Remote Work Success: Why Shared Context Beats Location",
+    url: "yoursite.com › blog › remote-work-shared-context",
+    desc: "Discover why the most productive remote teams focus on async communication as a skill. Learn the 3 habits that separate thriving distributed teams from struggling ones."
+  }
+};
+
+/* ─────────────────────────────────────────────────
+   PLATFORM MOCKUP RENDERERS — High-fidelity
+───────────────────────────────────────────────── */
+
+function renderLinkedIn(text) {
+  const preview = text.length > 280 ? text.slice(0, 280) + '…' : text;
+  return `<div class="platform-chrome mock-linkedin">
+    <div class="mock-li-topbar">
+      <div class="mock-li-logo">in</div>
+      <div class="mock-li-topnav">
+        <div class="mock-li-navitem"><svg-icon>⊞</svg-icon><span>Home</span></div>
+        <div class="mock-li-navitem"><svg-icon>👥</svg-icon><span>Network</span></div>
+        <div class="mock-li-navitem"><svg-icon>💼</svg-icon><span>Jobs</span></div>
+        <div class="mock-li-navitem"><svg-icon>✉</svg-icon><span>Messaging</span></div>
+      </div>
+    </div>
+    <div class="mock-li-card">
+      <div class="mock-li-header">
+        <div class="mock-li-avatar">A<div class="mock-li-online"></div></div>
+        <div style="flex:1;min-width:0">
+          <div class="mock-li-name">Alex Rivera <span>· 1st</span></div>
+          <div class="mock-li-title">Content Lead · Growth Marketing · Building in public</div>
+          <div class="mock-li-time">3h · 🌐</div>
+        </div>
+        <div class="mock-li-more">···</div>
+      </div>
+      <div class="mock-li-body">${preview.replace(/\n/g,'<br>')}<span class="mock-li-seemore"> …see more</span></div>
+      <div class="mock-li-stats">
+        <div class="mock-li-stats-left">
+          <span>👍</span><span>💜</span><span>🎉</span>
+          <span style="margin-left:4px">1,847</span>
+        </div>
+        <div class="mock-li-stats-right">284 comments · 47 reposts</div>
+      </div>
+      <div class="mock-li-reactions">
+        <div class="mock-li-btn"><span class="mock-li-btn-icon">👍</span> Like</div>
+        <div class="mock-li-btn"><span class="mock-li-btn-icon">💬</span> Comment</div>
+        <div class="mock-li-btn"><span class="mock-li-btn-icon">↗</span> Repost</div>
+        <div class="mock-li-btn"><span class="mock-li-btn-icon">✉</span> Send</div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderTwitter(tweets) {
+  const counts = [[68,54,268,'12.4K'],[42,31,425,'8.2K'],[29,18,195,'5.1K'],[18,12,147,'3.8K'],[14,9,89,'2.4K'],[8,5,62,'1.9K']];
+  return `<div class="platform-chrome mock-twitter">
+    <div class="mock-tw-topbar">
+      <div class="mock-tw-logo">𝕏</div>
+      <div class="mock-tw-tabs">
+        <div class="mock-tw-tab active">For you</div>
+        <div class="mock-tw-tab">Following</div>
+      </div>
+    </div>
+    ${tweets.map((t, i) => {
+      const c = counts[i] || counts[5];
+      const isLast = i === tweets.length - 1;
+      return `<div class="mock-tweet">
+        <div class="mock-tweet-left">
+          <div class="mock-tw-avatar">A</div>
+          ${!isLast ? '<div class="mock-tw-thread-line"></div>' : ''}
+        </div>
+        <div class="mock-tweet-right">
+          <div class="mock-tw-meta">
+            <span class="mock-tw-name">Alex Rivera</span>
+            <span class="mock-tw-verified">✓</span>
+            <span class="mock-tw-handle">@alexrivera</span>
+            <span class="mock-tw-dot">·</span>
+            <span class="mock-tw-time">${i === 0 ? '2h' : (i+'m').replace('0m','1m')}</span>
+            <span class="mock-tw-more">···</span>
+          </div>
+          <div class="mock-tw-body">${t.replace(/\n/g,'<br>').replace(/(https?:\/\/\S+)/g,'<a>$1</a>')}</div>
+          <div class="mock-tw-actions">
+            <div class="mock-tw-action"><span class="mock-tw-action-icon">💬</span> ${c[0]}</div>
+            <div class="mock-tw-action repost"><span class="mock-tw-action-icon">🔁</span> ${c[1]}</div>
+            <div class="mock-tw-action like"><span class="mock-tw-action-icon">🤍</span> ${c[2]}</div>
+            <div class="mock-tw-action"><span class="mock-tw-action-icon">📊</span> ${c[3]}</div>
+            <div class="mock-tw-action"><span class="mock-tw-action-icon">🔖</span></div>
+          </div>
+        </div>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+function renderNewsletter(text) {
+  return `<div class="platform-chrome mock-newsletter">
+    <div class="mock-gmail-topbar">
+      <div class="mock-gmail-logo">G<span>m</span><span>a</span><span>i</span><span>l</span></div>
+      <div class="mock-gmail-actions">
+        <span class="mock-gmail-icon">⊟</span>
+        <span class="mock-gmail-icon">↗</span>
+        <span class="mock-gmail-icon">×</span>
+      </div>
+    </div>
+    <div class="mock-email-subject-bar">
+      Why your remote team is losing (and it's not location)
+      <span class="mock-email-tag">Inbox</span>
+    </div>
+    <div class="mock-email-header">
+      <div class="mock-email-avatar">A</div>
+      <div style="flex:1">
+        <div class="mock-email-from-name">Alex Rivera <span style="color:#1a73e8;font-weight:400;font-size:0.72rem">Unsubscribe</span></div>
+        <div class="mock-email-from-addr">alex@newsletter.co</div>
+        <div class="mock-email-to">to me ▾</div>
+      </div>
+      <div class="mock-email-date">Mar 15, 2:41 PM</div>
+    </div>
+    <div class="mock-email-body">${text.replace(/\n/g,'<br>')}</div>
+    <div class="mock-email-footer">
+      <div class="mock-email-footer-btn">↩ Reply</div>
+      <div class="mock-email-footer-btn">↪ Forward</div>
+    </div>
+  </div>`;
+}
+
+function renderInstagram(text) {
+  const parts = text.split('\n');
+  const hashtagLine = parts.findIndex(l => l.startsWith('#'));
+  const caption = hashtagLine > 0 ? parts.slice(0, hashtagLine).join('\n') : text;
+  const hashtags = hashtagLine > 0 ? parts.slice(hashtagLine).join(' ') : '';
+  return `<div class="platform-chrome mock-instagram">
+    <div class="mock-ig-topbar">
+      <div class="mock-ig-wordmark">Instagram</div>
+      <div class="mock-ig-topicons"><span>♡</span><span>✉</span></div>
+    </div>
+    <div class="mock-ig-header">
+      <div class="mock-ig-avatar-wrap">
+        <div class="mock-ig-avatar-inner">
+          <div class="mock-ig-avatar-img"></div>
+        </div>
+      </div>
+      <div>
+        <div class="mock-ig-username">alexrivera_creates</div>
+        <div class="mock-ig-location">San Francisco, CA</div>
+      </div>
+      <div class="mock-ig-more">···</div>
+    </div>
+    <div class="mock-ig-photo">
+      <span class="mock-ig-photo-label">Your image</span>
+    </div>
+    <div class="mock-ig-dots">
+      <div class="mock-ig-dot"></div>
+      <div class="mock-ig-dot inactive"></div>
+      <div class="mock-ig-dot inactive"></div>
+    </div>
+    <div class="mock-ig-actions-row">
+      <span class="mock-ig-action">♡</span>
+      <span class="mock-ig-action">🗨</span>
+      <span class="mock-ig-action">✈</span>
+      <span class="mock-ig-action mock-ig-bookmark">🔖</span>
+    </div>
+    <div class="mock-ig-likes">2,847 likes</div>
+    <div class="mock-ig-caption"><strong>alexrivera_creates</strong> ${caption.replace(/\n/g,'<br>')}${hashtags ? '<br><span class="mock-ig-hashtags">'+hashtags+'</span>' : ''}</div>
+    <div class="mock-ig-comments">View all 184 comments</div>
+    <div class="mock-ig-time">3 hours ago</div>
+  </div>`;
+}
+
+function renderSEO(data) {
+  const tLen = data.title.length;
+  const dLen = data.desc.length;
+  const tPct = Math.min((tLen/60)*100, 100);
+  const dPct = Math.min((dLen/160)*100, 100);
+  return `<div class="platform-chrome mock-seo">
+    <div class="mock-google-topbar">
+      <div class="mock-google-logo">
+        <span>G</span><span>o</span><span>o</span><span>g</span><span>l</span><span>e</span>
+      </div>
+      <div class="mock-google-searchbar">
+        <span class="mock-google-search-icon">🔍</span>
+        <span>${data.title.split(':')[0]}</span>
+      </div>
+    </div>
+    <div class="mock-google-tabs">
+      <div class="mock-google-tab active">All</div>
+      <div class="mock-google-tab">Images</div>
+      <div class="mock-google-tab">News</div>
+      <div class="mock-google-tab">Videos</div>
+      <div class="mock-google-tab">Maps</div>
+    </div>
+    <div class="mock-serp-body">
+      <div style="font-size:0.72rem;color:#9aa0a6;margin-bottom:0.75rem">About 847,000 results (0.38 seconds)</div>
+      <div class="mock-serp-result">
+        <div class="mock-serp-breadcrumb">
+          <div class="mock-serp-favicon">P</div>
+          <div class="mock-serp-site">prism.io <span>› blog › remote-work</span></div>
+        </div>
+        <div class="mock-serp-title">${data.title}</div>
+        <div class="mock-serp-desc">${data.desc.replace(/\b(async|remote|distributed|productive)\b/gi, '<span>$1</span>')}</div>
+      </div>
+      <div class="mock-serp-divider"></div>
+      <div class="mock-serp-char-check">
+        <div class="mock-serp-char-row">
+          <div class="mock-serp-char-bar"><div class="mock-serp-char-fill${tLen>60?' warn':''}" style="width:${tPct}%"></div></div>
+          <div class="mock-serp-char-label">Title ${tLen}/60 ${tLen<=60?'✓':'⚠'}</div>
+        </div>
+        <div class="mock-serp-char-row">
+          <div class="mock-serp-char-bar"><div class="mock-serp-char-fill${dLen>160?' warn':''}" style="width:${dPct}%"></div></div>
+          <div class="mock-serp-char-label">Desc ${dLen}/160 ${dLen<=160?'✓':'⚠'}</div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ─────────────────────────────────────────────────
+   DEMO INTERACTION
+───────────────────────────────────────────────── */
+let generated = false;
+let currentTab = 'linkedin';
+
+function switchTab(btn, format) {
+  document.querySelectorAll('.output-tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  currentTab = format;
+  document.querySelectorAll('.output-result').forEach(r => r.classList.remove('visible'));
+  const el = document.getElementById('out-' + format);
+  if (generated && el && el.innerHTML) {
+    el.classList.add('visible');
+    document.getElementById('placeholder').style.display = 'none';
+  } else if (!generated) {
+    document.getElementById('placeholder').style.display = 'flex';
+  }
+}
+
+function typeHTML(el, html, onDone) {
+  // For mockups we reveal with a fade-in instead of char-by-char (HTML can't be char-typed safely)
+  el.innerHTML = html;
+  el.style.opacity = '0';
+  el.classList.add('visible');
+  let op = 0;
+  const fade = setInterval(() => {
+    op += 0.08;
+    el.style.opacity = Math.min(op, 1);
+    if (op >= 1) { clearInterval(fade); if (onDone) onDone(); }
+  }, 20);
+}
+
+async function runPrism() {
+  const btn = document.getElementById('runBtn');
+  btn.disabled = true;
+  document.getElementById('btnLabel').textContent = 'Generating…';
+  document.getElementById('btnArrow').textContent = '⟳';
+  document.getElementById('placeholder').style.display = 'none';
+  document.querySelectorAll('.output-result').forEach(r => { r.classList.remove('visible'); r.innerHTML = ''; r.style.opacity = ''; });
+  document.querySelectorAll('.output-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.output-tab')[0].classList.add('active');
+  currentTab = 'linkedin';
+
+  await new Promise(r => setTimeout(r, 600));
+
+  // Pre-render all mockups
+  document.getElementById('out-linkedin').innerHTML = renderLinkedIn(OUTPUTS.linkedin);
+  document.getElementById('out-twitter').innerHTML = renderTwitter(OUTPUTS.twitter);
+  document.getElementById('out-newsletter').innerHTML = renderNewsletter(OUTPUTS.newsletter);
+  document.getElementById('out-instagram').innerHTML = renderInstagram(OUTPUTS.instagram);
+  document.getElementById('out-seo').innerHTML = renderSEO(OUTPUTS.seo);
+
+  // Reveal LinkedIn with fade
+  const liEl = document.getElementById('out-linkedin');
+  liEl.style.opacity = '0';
+  liEl.classList.add('visible');
+  let op = 0;
+  const fade = setInterval(() => {
+    op += 0.06;
+    liEl.style.opacity = Math.min(op, 1);
+    if (op >= 1) clearInterval(fade);
+  }, 20);
+
+  generated = true;
+  btn.disabled = false;
+  document.getElementById('btnLabel').textContent = 'Repurpose Again';
+  document.getElementById('btnArrow').textContent = '→';
+}
+
+/* ═══════════════════════════════════════════════════════════
+   CINEMATIC SCROLL SECTION — Chaos → PRISM → Clarity
+   Scroll-driven, no timers, pure rAF + scroll progress
+═══════════════════════════════════════════════════════════ */
+(function() {
+  const wrapper   = document.getElementById('cine-wrapper');
+  const stage     = document.getElementById('cine-stage');
+  const chaosEl   = document.getElementById('cine-chaos');
+  if (!wrapper || !stage || !chaosEl) return;
+
+  /* ── 1. Build chaos words ─────────────────────────── */
+  const CHAOS_WORDS = [
+    { text: 'the office',         sz: 1.55, w: 700 },
+    { text: 'was never about',    sz: 1.0,  w: 300 },
+    { text: 'location',           sz: 2.1,  w: 600 },
+    { text: 'async',              sz: 1.8,  w: 700 },
+    { text: "it's a skill",       sz: 1.1,  w: 400 },
+    { text: 'write with precision',sz: 0.85, w: 300 },
+    { text: 'shared context',     sz: 1.65, w: 600 },
+    { text: 'document obsessively',sz: 0.8, w: 300 },
+    { text: 'remote teams',       sz: 1.3,  w: 500 },
+    { text: 'that win',           sz: 1.7,  w: 700 },
+    { text: 'build context',      sz: 1.0,  w: 400 },
+    { text: 'not the commute',    sz: 0.9,  w: 300 },
+    { text: 'future of work',     sz: 1.45, w: 600 },
+    { text: "it's intentional",   sz: 1.2,  w: 500 },
+    { text: 'three years',        sz: 0.8,  w: 300 },
+    { text: 'one insight',        sz: 1.55, w: 700 },
+    { text: 'five platforms',     sz: 1.1,  w: 400 },
+    { text: 'every single week',  sz: 1.35, w: 600 },
+    { text: 'blank drafts',       sz: 0.9,  w: 300 },
+    { text: 'context travels',    sz: 1.0,  w: 400 },
+    { text: 'time zones',         sz: 1.25, w: 500 },
+    { text: 'stop staring',       sz: 1.4,  w: 600 },
+    { text: "isn't a fallback",   sz: 0.85, w: 300 },
+    { text: 'culture not commute',sz: 0.75, w: 300 },
+  ];
+
+  /* deterministic pseudo-random using index so it's stable */
+  function pr(i, salt) {
+    const x = Math.sin(i * 9301 + salt * 49297 + 233720) * 43758.5453;
+    return x - Math.floor(x);
+  }
+
+  const wordEls   = [];
+  const wordMeta  = [];
+
+  CHAOS_WORDS.forEach(function(w, i) {
+    const el    = document.createElement('span');
+    el.className = 'chaos-word';
+    el.textContent = w.text;
+
+    const left  = 3  + pr(i, 1) * 88;   // % of viewport
+    const top   = 4  + pr(i, 2) * 86;
+    const rot   = (pr(i, 3) - 0.5) * 18; // deg
+    const alpha = 0.28 + pr(i, 4) * 0.55;
+    /* drift direction toward center (expressed as % offset) */
+    const cx    = 50 - left;
+    const cy    = 50 - top;
+
+    el.style.cssText = [
+      'left:'+ left +'%',
+      'top:' + top  +'%',
+      'font-size:' + w.sz + 'rem',
+      'font-weight:' + w.w,
+      'transform:rotate('+ rot +'deg)',
+      'opacity:' + alpha
+    ].join(';');
+
+    chaosEl.appendChild(el);
+    wordEls.push(el);
+    wordMeta.push({ left, top, rot, alpha, cx, cy });
+  });
+
+  /* ── 2. Grab all animated elements ───────────────── */
+  const elChaosLabel   = document.getElementById('cine-chaos-label');
+  const elPhone        = document.getElementById('cine-phone');
+  const elRing         = document.getElementById('cine-ring');
+  const elRingGlow     = document.getElementById('cine-ring-glow');
+  const elPhoneLogo    = document.getElementById('cine-phone-logo');
+  const elInputLabel   = document.getElementById('cine-input-label');
+  const elClarityLabel = document.getElementById('cine-clarity-label');
+  const elCTA          = document.getElementById('cine-cta');
+  const cards          = [0,1,2,3,4].map(function(n) {
+    return document.getElementById('cine-card-' + n);
+  });
+
+  /* ── 3. Math helpers ──────────────────────────────── */
+  function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+  function ss(edge0, edge1, x) {
+    /* smoothstep — eases a value 0→1 across [edge0, edge1] */
+    var t = clamp((x - edge0) / (edge1 - edge0), 0, 1);
+    return t * t * (3 - 2 * t);
+  }
+  function lerp(a, b, t) { return a + (b - a) * t; }
+  function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
+  function easeOutBack(t) {
+    /* slight overshoot for spring card arrivals */
+    var c1 = 1.70158, c3 = c1 + 1;
+    return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+  }
+
+  /* ── 4. Card stacking final positions ───────────────
+     Cards stack from bottom; each card rests at a Y offset.
+     Phone screen is ~396px tall.
+     5 cards: last arrived (SEO) shows fully; others peek.  */
+  const CARD_STACK_Y = [270, 220, 170, 120, 0]; /* bottom from 0 */
+  /* We convert to top-from-screen-top */
+  const SCREEN_H = 396;
+  /* translateY values for final positions (pixels from off-screen bottom) */
+  /* We'll position each card at bottom:0, then translateY */
+  const CARD_FINAL_Y = [
+    SCREEN_H - CARD_STACK_Y[0] - 50,  /* card 0 — LI peeks */
+    SCREEN_H - CARD_STACK_Y[1] - 50,
+    SCREEN_H - CARD_STACK_Y[2] - 50,
+    SCREEN_H - CARD_STACK_Y[3] - 50,
+    0   /* card 4 — SEO top of stack, fully visible */
+  ];
+  /* Reverse: we want the last card on top (z-index) */
+  cards.forEach(function(c, i) {
+    if (c) c.style.zIndex = i + 1;
+  });
+
+  /* Card arrival thresholds (progress values 0-1) */
+  const CARD_THRESH  = [0.54, 0.63, 0.71, 0.79, 0.87];
+  const CARD_SPREAD  = 0.07; /* duration over which each card arrives */
+
+  var ringSpinning = false;
+
+  /* ── 5. Main update function ──────────────────────── */
+  function update() {
+    rafId = null;
+
+    var rect    = wrapper.getBoundingClientRect();
+    var sTop    = -rect.top;
+    var sHeight = wrapper.offsetHeight;
+    var winH    = window.innerHeight;
+    var maxScroll = sHeight - winH;
+    if (maxScroll <= 0) return;
+
+    var p = clamp(sTop / maxScroll, 0, 1.02);
+
+    /* ── Phase 1: CHAOS  0 → 0.38 ─────────────────── */
+    var chaosFull    = ss(0, 0.18, p);          /* words fully visible */
+    var chaosExiting = ss(0.28, 0.50, p);       /* words fading/converging */
+    var wordsOpacity = chaosFull * (1 - chaosExiting);
+    var wordsBlur    = chaosExiting * 5;
+    var wordsConv    = ss(0.30, 0.50, p);       /* convergence 0→1 */
+
+    /* Subtle red bg tint during chaos */
+    var rTint = Math.round((1 - chaosExiting) * chaosFull * 18);
+    stage.style.background = 'rgb(' + rTint + ',7,10)';
+
+    wordEls.forEach(function(el, i) {
+      var m = wordMeta[i];
+      var convX = m.cx * wordsConv * 0.9;
+      var convY = m.cy * wordsConv * 0.9;
+      el.style.transform  = 'rotate(' + (m.rot * (1 - wordsConv * 0.6)) + 'deg) translate(' + convX + '%, ' + convY + '%)';
+      el.style.opacity    = m.alpha * wordsOpacity;
+      el.style.filter     = wordsBlur > 0.1 ? 'blur(' + wordsBlur.toFixed(1) + 'px)' : '';
+    });
+
+    /* "Every. Single. Week." fades in at ~15%, out at ~30% */
+    elChaosLabel.style.opacity = ss(0.10, 0.22, p) * (1 - ss(0.27, 0.37, p));
+
+    /* ── Phase 2: PRISM MOMENT  0.35 → 0.55 ──────── */
+    var phoneIn    = ss(0.34, 0.50, p);
+    var phoneScale = lerp(0.55, 1, easeOutCubic(phoneIn));
+    var phoneAlpha = phoneIn;
+    elPhone.style.opacity   = phoneAlpha;
+    elPhone.style.transform = 'scale(' + phoneScale + ')';
+
+    /* Processing ring */
+    var ringAlpha = ss(0.38, 0.47, p) * (1 - ss(0.50, 0.58, p));
+    elRing.style.opacity     = ringAlpha;
+    elRingGlow.style.opacity = ringAlpha * 0.6;
+    if (ringAlpha > 0.05 && !ringSpinning) {
+      elRing.classList.add('spinning');
+      ringSpinning = true;
+    } else if (ringAlpha < 0.02 && ringSpinning) {
+      elRing.classList.remove('spinning');
+      ringSpinning = false;
+    }
+
+    /* PRISM logo pulses inside phone */
+    var logoAlpha = ss(0.40, 0.49, p) * (1 - ss(0.50, 0.57, p));
+    var logoScale = lerp(0.7, 1.15, ss(0.40, 0.49, p));
+    elPhoneLogo.style.opacity   = logoAlpha;
+    elPhoneLogo.style.transform = 'translate(-50%,-50%) scale(' + logoScale + ')';
+
+    /* "One input." label */
+    var inputLabelAlpha = ss(0.42, 0.51, p) * (1 - ss(0.54, 0.62, p));
+    var inputLabelY     = lerp(12, 0, easeOutCubic(ss(0.42, 0.51, p)));
+    elInputLabel.style.opacity   = inputLabelAlpha;
+    elInputLabel.style.transform = 'translateX(-50%) translateY(' + inputLabelY + 'px)';
+
+    /* ── Phase 3: CLARITY  0.54 → 0.94 ───────────── */
+    cards.forEach(function(card, i) {
+      if (!card) return;
+      var t   = CARD_THRESH[i];
+      var cp  = ss(t, t + CARD_SPREAD, p);
+      var finalY = CARD_FINAL_Y[i];
+      var curY   = lerp(400, finalY, easeOutBack(cp));
+      card.style.transform = 'translateY(' + curY + 'px)';
+      card.style.opacity   = cp;
+    });
+
+    /* "Five platforms. One click." fades in at ~90% */
+    elClarityLabel.style.opacity = ss(0.90, 0.97, p);
+
+    /* ── Phase 4: RELEASE  0.95 → 1.0 ────────────── */
+    var releaseP = ss(0.95, 1.02, p);
+    if (releaseP > 0) {
+      var exitX = lerp(0, 22, releaseP);
+      var exitS = lerp(1, 0.82, releaseP);
+      elPhone.style.transform = 'scale(' + (phoneScale * exitS) + ') translateX(' + exitX + 'vw)';
+      /* clarity label exits left */
+      elClarityLabel.style.transform = 'translateX(calc(-50% - ' + (releaseP * 30) + 'vw)) translateY(0)';
+    }
+
+    /* CTA fades in */
+    elCTA.style.opacity = ss(0.97, 1.02, p);
+  }
+
+  /* ── 6. Scroll listener with rAF throttle ─────────── */
+  var rafId = null;
+  function onScroll() {
+    if (!rafId) rafId = requestAnimationFrame(update);
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  window.addEventListener('resize', update, { passive: true });
+
+  /* ── 7. Tiny chaos drift — CSS keyframes per word ─── */
+  /* Inject per-word drift animations so words breathe without JS */
+  var driftCSS = '';
+  wordMeta.forEach(function(m, i) {
+    var dx  = (Math.sin(i * 2.3) * 14).toFixed(1);
+    var dy  = (Math.cos(i * 1.7) * 10).toFixed(1);
+    var dur = (3.5 + (i % 7) * 0.6).toFixed(1);
+    driftCSS += '@keyframes cdrift' + i + '{'
+      + 'from{transform:rotate(' + m.rot.toFixed(1) + 'deg) translate(0,0)}'
+      + '50%{transform:rotate(' + (m.rot * 0.8).toFixed(1) + 'deg) translate(' + dx + 'px,' + dy + 'px)}'
+      + 'to{transform:rotate(' + m.rot.toFixed(1) + 'deg) translate(0,0)}}\n';
+  });
+  var driftStyleEl = document.createElement('style');
+  driftStyleEl.textContent = driftCSS;
+  document.head.appendChild(driftStyleEl);
+  /* Apply drift animations to words — they'll be overridden by JS during convergence */
+  wordEls.forEach(function(el, i) {
+    var dur = (3.5 + (i % 7) * 0.6).toFixed(1);
+    el.style.animation = 'cdrift' + i + ' ' + dur + 's ease-in-out infinite';
+    el.style.animationDelay = -(i * 0.4).toFixed(1) + 's';
+  });
+
+  /* Initial render */
+  update();
+})();
+
+/* ══ AURORA CANVAS BACKGROUND ═══════════════════════════════════════ */
+(function() {
+  var canvas = document.createElement('canvas');
+  canvas.id = 'aurora';
+  canvas.style.cssText = 'position:fixed;inset:0;z-index:0;pointer-events:none;opacity:0.5';
+  document.body.insertBefore(canvas, document.body.firstChild);
+  var ctx = canvas.getContext('2d');
+  var BLOBS = [
+    { cx:0.25, cy:0.35, r:0.50, color:[240,82,42,0.10],  ax:0.7, ay:0.5, px:0, py:0 },
+    { cx:0.75, cy:0.65, r:0.55, color:[0,221,180,0.07],  ax:0.5, ay:0.8, px:1, py:2 },
+    { cx:0.50, cy:0.20, r:0.42, color:[120,40,200,0.06], ax:0.9, ay:0.4, px:3, py:1 },
+    { cx:0.60, cy:0.80, r:0.38, color:[255,160,40,0.05], ax:0.4, ay:0.7, px:2, py:3 },
+  ];
+  var t = 0, last = 0;
+  function resize() {
+    canvas.width  = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+  window.addEventListener('resize', resize);
+  resize();
+  function drawFrame(now) {
+    var dt = Math.min((now - last) / 1000, 0.1);
+    last = now;
+    t += dt * 0.22;
+    var W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+    var scrollOff = window.scrollY * 0.18;
+    BLOBS.forEach(function(b) {
+      var bx = (b.cx + Math.sin(t * b.ax + b.px) * 0.18) * W;
+      var by = (b.cy + Math.cos(t * b.ay + b.py) * 0.14) * H + scrollOff;
+      var br = b.r * Math.max(W, H) * 0.7;
+      var c = b.color;
+      var g = ctx.createRadialGradient(bx, by, 0, bx, by, br);
+      g.addColorStop(0,   'rgba('+c[0]+','+c[1]+','+c[2]+','+c[3]+')');
+      g.addColorStop(0.5, 'rgba('+c[0]+','+c[1]+','+c[2]+','+(c[3]*0.4)+')');
+      g.addColorStop(1,   'rgba('+c[0]+','+c[1]+','+c[2]+',0)');
+      ctx.beginPath();
+      ctx.arc(bx, by, br, 0, Math.PI * 2);
+      ctx.fillStyle = g;
+      ctx.fill();
+    });
+    requestAnimationFrame(drawFrame);
+  }
+  requestAnimationFrame(function(now) { last = now; drawFrame(now); });
+})();
+
+/* ══ CURSOR AMBIENT GLOW ════════════════════════════════════════════ */
+(function() {
+  var rafPending = false;
+  document.addEventListener('mousemove', function(e) {
+    if (rafPending) return;
+    rafPending = true;
+    requestAnimationFrame(function() {
+      document.body.style.setProperty('--cx', e.clientX + 'px');
+      document.body.style.setProperty('--cy', e.clientY + 'px');
+      rafPending = false;
+    });
+  });
+})();
+
+/* ══ HERO WORD-BY-WORD REVEAL ═══════════════════════════════════════ */
+(function() {
+  document.querySelectorAll('.hero h1').forEach(function(h1) {
+    // Preserve em tags by working on child nodes
+    var html = '';
+    var wordIdx = 0;
+    h1.childNodes.forEach(function(node) {
+      if (node.nodeType === 3) { // text node
+        var words = node.textContent.split(/(\s+)/);
+        words.forEach(function(part) {
+          if (/\S/.test(part)) {
+            html += '<span class="word-reveal" style="animation-delay:' + (wordIdx * 75) + 'ms">' + part + '</span>';
+            wordIdx++;
+          } else {
+            html += part;
+          }
+        });
+      } else if (node.nodeName === 'EM') {
+        var inner = node.textContent.split(/(\s+)/);
+        inner.forEach(function(part) {
+          if (/\S/.test(part)) {
+            html += '<em><span class="word-reveal" style="animation-delay:' + (wordIdx * 75) + 'ms">' + part + '</span></em>';
+            wordIdx++;
+          } else {
+            html += part;
+          }
+        });
+      } else {
+        html += node.outerHTML || node.textContent;
+      }
+    });
+    h1.innerHTML = html;
+  });
+})();
+
+/* ══ PRICING CARD 3D TILT ═══════════════════════════════════════════ */
+(function() {
+  document.querySelectorAll('.pricing-card').forEach(function(card) {
+    card.addEventListener('mousemove', function(e) {
+      var r  = card.getBoundingClientRect();
+      var mx = (e.clientX - r.left)  / r.width;
+      var my = (e.clientY - r.top)   / r.height;
+      card.style.transform = [
+        'perspective(1200px)',
+        'rotateX(' + ((my - 0.5) * -14) + 'deg)',
+        'rotateY(' + ((mx - 0.5) * 10)  + 'deg)',
+        'translateZ(6px)'
+      ].join(' ');
+      card.style.setProperty('--mx', mx);
+      card.style.setProperty('--my', my);
+    });
+    card.addEventListener('mouseleave', function() {
+      card.style.transform = 'perspective(1200px) rotateX(0) rotateY(0) translateZ(0)';
+    });
+  });
+})();
+</script>
+</body>
+</html>
